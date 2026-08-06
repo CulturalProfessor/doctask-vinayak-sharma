@@ -1,0 +1,11 @@
+{
+  "purpose": "extract",
+  "prompt_preview": "Document type: notice\nFilename: notice_nonrenewal.md\n\nFields to extract:\n  counterparty (text) [required] -- The vendor the notice concerns.\n  notice_type (text) -- Whether this is a termination, non-renewal, or renewal notice.\n  notice_date (date) -- The date the notice was given.\n  effective_date (date) -- The date the termination or renewal takes effect.\n  notice_period_days (number) [unit: days] -- The notice period the sender claims to be observing, in days.\n\n<<<BEGIN UNTRUSTED DOCUMENT>>>\n",
+  "text": "{\"fields\": {\"counterparty\": {\"value\": \"Acme Fabrication Services LLC\", \"quote\": \"Acme Fabrication Services LLC\", \"confidence\": 1.0}, \"notice_type\": {\"value\": \"non-renewal\", \"quote\": \"NOTICE OF NON-RENEWAL\", \"confidence\": 1.0}, \"notice_date\": {\"value\": \"1 February 2027\", \"quote\": \"1 February 2027\", \"confidence\": 1.0}, \"effective_date\": {\"value\": \"1 March 2027\", \"quote\": \"1 March 2027\", \"confidence\": 1.0}, \"notice_period_days\": {\"value\": 30, \"quote\": \"thirty (30) days\", \"confidence\": 1.0}}}",
+  "usage": {
+    "tokens_in": 652,
+    "tokens_out": 414,
+    "cost_usd": 0.0,
+    "model": "nvidia/nemotron-3-ultra-550b-a55b:free"
+  }
+}

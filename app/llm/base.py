@@ -62,8 +62,53 @@ class Completion:
                 raw = raw[4:].strip()
         try:
             return json.loads(raw)
-        except json.JSONDecodeError as exc:
-            raise ProviderError(f"model did not return JSON: {exc}\n{self.text[:400]}") from exc
+        except json.JSONDecodeError:
+            pass
+
+        # Last resort: the first balanced JSON object in the response. Smaller
+        # models narrate before answering ("Here are the fields:") often enough
+        # that rejecting those outright would waste a retry every time.
+        #
+        # Scoped deliberately: it extracts one *balanced* object rather than
+        # regexing between the first and last brace, and it still raises when
+        # there is no object at all. A parser that always finds something would
+        # turn a refusal or an error message into a silently empty result.
+        extracted = _first_json_object(raw)
+        if extracted is not None:
+            try:
+                return json.loads(extracted)
+            except json.JSONDecodeError:
+                pass
+        raise ProviderError(f"model did not return JSON:\n{self.text[:400]}")
+
+
+def _first_json_object(text: str) -> str | None:
+    """Return the first balanced {...} run, respecting strings and escapes."""
+    start = text.find("{")
+    if start == -1:
+        return None
+    depth = 0
+    in_string = False
+    escaped = False
+    for i in range(start, len(text)):
+        ch = text[i]
+        if in_string:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_string = False
+            continue
+        if ch == '"':
+            in_string = True
+        elif ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start:i + 1]
+    return None
 
 
 def call_key(purpose: str, system: str, user: str) -> str:
@@ -91,4 +136,10 @@ def get_provider(name: str | None = None) -> Provider:
         from app.llm.anthropic import AnthropicProvider
 
         return AnthropicProvider()
-    raise ProviderError(f"unknown LLM_PROVIDER {choice!r}; expected 'fake' or 'anthropic'")
+    if choice == "openrouter":
+        from app.llm.openrouter import OpenRouterProvider
+
+        return OpenRouterProvider()
+    raise ProviderError(
+        f"unknown LLM_PROVIDER {choice!r}; expected 'fake', 'openrouter' or 'anthropic'"
+    )

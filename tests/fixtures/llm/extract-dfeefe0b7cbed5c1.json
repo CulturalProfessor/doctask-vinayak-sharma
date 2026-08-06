@@ -1,0 +1,11 @@
+{
+  "purpose": "extract",
+  "prompt_preview": "Document type: sow\nFilename: sow_014.html\n\nFields to extract:\n  counterparty (text) [required] -- The vendor performing the work.\n  sow_number (text) -- The statement of work's identifier.\n  start_date (date) -- The date work begins.\n  end_date (date) -- The date work is scheduled to complete.\n  hours_cap (number) [unit: hours] -- The maximum billable hours authorised, if capped.\n  hourly_rate (money) -- The rate stated for this engagement, if the SOW restates one.\n  total_value (money) -- The t",
+  "text": "{\"fields\": {\"counterparty\": {\"value\": \"Acme Fabrication Services LLC\", \"quote\": \"Acme Fabrication Services LLC\", \"confidence\": 0.99}, \"sow_number\": {\"value\": \"SOW-014\", \"quote\": \"SOW-014\", \"confidence\": 0.99}, \"start_date\": {\"value\": \"1 April 2026\", \"quote\": \"1 April 2026\", \"confidence\": 0.99}, \"end_date\": {\"value\": \"30 September 2026\", \"quote\": \"30 September 2026\", \"confidence\": 0.99}, \"hours_cap\": {\"value\": \"400\", \"quote\": \"four hundred (400) hours\", \"confidence\": 0.99}, \"total_value\": {\"value\": \"USD 54,000\", \"quote\": \"USD 54,000\", \"confidence\": 0.99}}}",
+  "usage": {
+    "tokens_in": 760,
+    "tokens_out": 850,
+    "cost_usd": 0.0,
+    "model": "nvidia/nemotron-3-ultra-550b-a55b:free"
+  }
+}

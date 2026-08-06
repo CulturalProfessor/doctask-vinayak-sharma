@@ -1,0 +1,11 @@
+{
+  "purpose": "extract",
+  "prompt_preview": "Document type: invoice\nFilename: invoice_1051.txt\n\nFields to extract:\n  counterparty (text) [required] -- The vendor issuing the invoice.\n  invoice_number (text) -- The invoice number as printed.\n  invoice_date (date) -- The date the invoice was issued.\n  service_period (text) -- The period of service the invoice covers.\n  hourly_rate (money) -- The hourly rate actually billed on this invoice.\n  hours_billed (number) [unit: hours] -- The total number of hours billed.\n  amount_due (money) -- The ",
+  "text": "{\n  \"fields\": {\n    \"counterparty\": {\n      \"value\": \"ACME FABRICATION SERVICES LLC\",\n      \"quote\": \"ACME FABRICATION SERVICES LLC\",\n      \"confidence\": 0.99\n    },\n    \"invoice_number\": {\n      \"value\": \"ACM-1051\",\n      \"quote\": \"ACM-1051\",\n      \"confidence\": 0.99\n    },\n    \"invoice_date\": {\n      \"value\": \"4 September 2026\",\n      \"quote\": \"4 September 2026\",\n      \"confidence\": 0.99\n    },\n    \"service_period\": {\n      \"value\": \"1 August 2026 - 31 August 2026\",\n      \"quote\": \"1 August 2026 - 31 August 2026\",\n      \"confidence\": 0.99\n    },\n    \"hourly_rate\": {\n      \"value\": \"USD 135\",\n      \"quote\": \"USD 135\",\n      \"confidence\": 0.99\n    },\n    \"hours_billed\": {\n      \"value\": \"180\",\n      \"quote\": \"180\",\n      \"confidence\": 0.99\n    },\n    \"amount_due\": {\n      \"value\": \"USD 24,300\",\n      \"quote\": \"USD 24,300\",\n      \"confidence\": 0.99\n    },\n    \"payment_terms_days\": {\n      \"value\": \"30\",\n      \"quote\": \"Net 30 days from receipt.\",\n      \"confidence\": 0.99\n    }\n  }\n}",
+  "usage": {
+    "tokens_in": 708,
+    "tokens_out": 1688,
+    "cost_usd": 0.0,
+    "model": "nvidia/nemotron-3-ultra-550b-a55b:free"
+  }
+}

@@ -39,6 +39,12 @@ class Settings:
     llm_provider: str = os.environ.get("LLM_PROVIDER", "fake")
     anthropic_api_key: str = os.environ.get("ANTHROPIC_API_KEY", "")
     model: str = os.environ.get("MODEL", "claude-sonnet-5")
+    # OpenRouter, used to record fixtures without anyone needing a paid key.
+    # The default model is priced at zero; recording is a one-time cost.
+    openrouter_key: str = os.environ.get("OPEN_ROUTER_KEY", "")
+    openrouter_model: str = os.environ.get(
+        "OPENROUTER_MODEL", "nvidia/nemotron-3-ultra-550b-a55b:free"
+    )
     watch_dir: Path = Path(os.environ.get("WATCH_DIR", str(REPO_ROOT / "corpora" / "inbox")))
     config_root: Path = REPO_ROOT / "config" / "domains"
     fixture_root: Path = REPO_ROOT / "tests" / "fixtures" / "llm"

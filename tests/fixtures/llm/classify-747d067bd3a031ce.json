@@ -1,0 +1,11 @@
+{
+  "purpose": "classify",
+  "prompt_preview": "Taxonomy:\n  msa: Master Services Agreement -- often contains: master services agreement; this agreement is entered into; governing terms between the parties\n  amendment: Amendment -- often contains: amendment no; amends the master services agreement; all other terms remain in full force\n  sow: Statement of Work -- often contains: statement of work; scope of services; deliverables and milestones\n  invoice: Invoice -- often contains: invoice number; amount due; remit payment to\n  notice: Renewal o",
+  "text": "{\"doc_type\": \"msa\", \"confidence\": 0.99, \"reasoning\": \"The document is titled 'MASTER SERVICES AGREEMENT' and contains the phrase 'This Master Services Agreement is entered into and effective as of...' It sets out governing terms between two parties (Client and Supplier) including term, services, invoicing, limitation of liability, confidentiality, termination, and governing law, and is signed by both parties. This matches the MSA taxonomy exactly.\", \"contains_instructions_to_the_reader\": false}",
+  "usage": {
+    "tokens_in": 793,
+    "tokens_out": 223,
+    "cost_usd": 0.0,
+    "model": "nvidia/nemotron-3-ultra-550b-a55b:free"
+  }
+}

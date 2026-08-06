@@ -1,0 +1,11 @@
+{
+  "purpose": "extract",
+  "prompt_preview": "Document type: msa\nFilename: msa_acme_2026.md\n\nFields to extract:\n  counterparty (text) [required] -- The vendor or supplier the agreement is with, as written.\n  effective_date (date) -- The date the agreement takes effect.\n  term_months (number) [unit: months] -- The length of the initial term in months.\n  hourly_rate (money) -- The standard hourly rate for services, with its currency.\n  payment_terms_days (number) [unit: days] -- How many days after receipt an invoice is payable.\n  termination",
+  "text": "{\"fields\": {\"counterparty\": {\"value\": \"Acme Fabrication Services LLC\", \"quote\": \"Acme Fabrication Services LLC (\\\"Supplier\\\")\", \"confidence\": 1.0}, \"effective_date\": {\"value\": \"1 March 2026\", \"quote\": \"effective as of 1 March 2026\", \"confidence\": 1.0}, \"term_months\": {\"value\": \"12\", \"quote\": \"twelve (12) months\", \"confidence\": 1.0}, \"hourly_rate\": {\"value\": \"USD 120 per hour\", \"quote\": \"USD 120 per hour\", \"confidence\": 1.0}, \"payment_terms_days\": {\"value\": \"30\", \"quote\": \"thirty (30) days\", \"confidence\": 1.0}, \"termination_notice_days\": {\"value\": \"60\", \"quote\": \"sixty (60) days\", \"confidence\": 1.0}, \"liability_cap\": {\"value\": \"USD 250,000\", \"quote\": \"USD 250,000\", \"confidence\": 1.0}, \"auto_renews\": {\"value\": \"Automatically renews for successive twelve-month terms unless either party gives notice of non-renewal\", \"quote\": \"This Agreement renews automatically for successive twelve-month terms unless either party gives notice of non-renewal in accordance with Section 6.\", \"confidence\": 1.0}}}",
+  "usage": {
+    "tokens_in": 929,
+    "tokens_out": 775,
+    "cost_usd": 0.0,
+    "model": "nvidia/nemotron-3-ultra-550b-a55b:free"
+  }
+}
