@@ -25,6 +25,33 @@ tolerance:
   duration_days:
     absolute: 0
 
+# Fields that describe the document instance rather than the engagement.
+#
+# Three invoices legitimately carry three different invoice numbers, dates,
+# hours and amounts. Comparing those across documents produces noise, not
+# disagreement -- and six spurious conflicts alongside three real ones is worse
+# than no conflict detection at all, because a reviewer stops reading.
+#
+# Fields NOT listed here are contractual terms. Two documents stating different
+# values for one of those IS the disagreement worth surfacing -- which is why
+# hourly_rate and payment_terms_days are deliberately absent, even though
+# invoices restate both.
+instance_fields:
+  - invoice_number
+  - invoice_date
+  - service_period
+  - hours_billed
+  - amount_due
+  - sow_number
+  - amendment_number
+  - start_date
+  - end_date
+  - effective_date
+  - notice_type
+  - notice_date
+  - notice_period_days
+  - total_value
+
 # Fields where documents are *expected* to differ over time. A rate that
 # changed in an amendment is history, not a contradiction -- unless a document
 # dated after the change still uses the old value, which is the case worth

@@ -142,3 +142,16 @@ def _validate(cfg: DomainConfig) -> None:
     for t in cfg.reconciliation.get("precedence", []):
         if t not in known_types:
             raise ConfigError(f"reconciliation precedence names unknown doc type {t!r}")
+
+    # A typo in instance_fields silently re-enables noisy conflicts for that
+    # field, which is the kind of failure nobody notices until a demo.
+    known_fields = {
+        name for schema in cfg.extraction.values() for name in schema.get("fields", {})
+    }
+    for key in ("instance_fields", "time_varying_fields"):
+        unknown = [f for f in cfg.reconciliation.get(key, []) if f not in known_fields]
+        if unknown:
+            raise ConfigError(
+                f"reconciliation {key} names fields that no extraction schema "
+                f"declares: {unknown}"
+            )

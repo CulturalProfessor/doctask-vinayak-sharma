@@ -58,6 +58,15 @@ class NormalisedValue:
     as_date: date | None = None
     ambiguous: bool = False
     note: str | None = None
+    # What a person should see. Text values casefold for comparison, and
+    # rendering the casefolded form would put "acme fabrication services llc"
+    # into a register a human reads. Machines group on `canonical`; humans read
+    # `display`.
+    _display: str | None = None
+
+    @property
+    def display(self) -> str:
+        return self._display or self.canonical
 
 
 def plain(value: Decimal) -> str:
@@ -214,7 +223,8 @@ def _number_value(raw: str) -> NormalisedValue | None:
 
 def _text_value(raw: str) -> NormalisedValue:
     collapsed = " ".join(str(raw).split())
-    return NormalisedValue(raw=str(raw), canonical=collapsed.casefold(), value_type="text")
+    return NormalisedValue(raw=str(raw), canonical=collapsed.casefold(),
+                           value_type="text", _display=collapsed)
 
 
 def values_agree(a: NormalisedValue, b: NormalisedValue, cfg: dict[str, Any]) -> bool:
