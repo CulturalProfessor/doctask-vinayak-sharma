@@ -427,12 +427,66 @@ committed (`f2094b8a`, `d87f2b4f`, `fdfdcea8`, `88ff8462`, `5695b9a8`,
 foundation the "an update touched nothing else" proof stands on, and it now
 holds across processes and machines rather than only within one.
 
+---
+
+## 2026-08-07 (late) — the third movement: it stays alive
+
+`amendment_02.md` arrives, raising the rate to USD 145 and the notice period to
+90 days. Result: **2 model calls, 4 sections changed, 2 provably byte-identical,
+7 proposals raised instead of 9.**
+
+### Two economies, deliberately not conflated
+
+Model work is genuinely incremental — only the arriving document is classified
+and extracted. Composition is recomputed *in full* and then diffed, because it is
+pure CPU over facts already held. That is the counter-intuitive half and it is
+the point: recomputing makes the untouched sections **provably** unchanged rather
+than unchanged because we predicted they would be and skipped them. A predicted
+no-op is an assumption; a recomputed identical hash is evidence.
+
+### Two bugs the arriving document exposed
+
+**Entity resolution cannot trust the model for identity.** Amendment 1 answered
+`Acme Fabrication Services LLC`. Amendment 2 — a near-identical document —
+answered `Brightwell Manufacturing Inc. and Acme Fabrication Services LLC`. Both
+are defensible readings of "who is the agreement with", and they slug to
+different keys.
+
+The consequence would have been silent and total: the pile splits into two
+engagements, no group ever holds both rates, and the contradiction the update
+exists to surface is invisible — while the register looks perfectly clean. This
+is the most dangerous failure the system can have, because it produces
+confident-looking output with nothing behind it.
+
+Resolution now treats the model's answer as a *candidate name* and settles
+identity against engagements the pile already knows: alias → exact → token
+containment → new. A name matching two known engagements **escalates**; merging
+corrupts the register, splitting hides every conflict, and neither is ours to
+choose silently.
+
+**Precedence by document type could not separate two amendments.** Both outrank
+the agreement they amend, so the proposer correctly refused to choose — and thus
+gave up exactly where a reviewer most needs an answer. It now breaks the tie the
+way the documents themselves do: the later effective date supersedes the earlier,
+stated explicitly in the rationale. Where dates are missing or equal it still
+refuses to guess.
+
+### Proven
+
+| Claim | Evidence |
+|---|---|
+| An update costs like an update | 2 model calls, not 16 |
+| Untouched sections unchanged | `billing`, `gaps` — hashes recomputed and identical |
+| Something *did* change | `commercials`, `risk`, `parties`, `disagreements` moved |
+| Only the update is proposed | 7 proposals, `billing` not among them |
+| New contradiction surfaced | USD 145 vs 135 vs 120, proposed from amendment 2 |
+| Re-arrival is a no-op | duplicate → 0 model calls, 0 new facts |
+| Version 2 is complete | 4 written + 2 carried = 6 sections |
+| Audit names the cause | `commercials d87f2b4f → 96ec3a2b, cause=amendment_02.md` |
+
 ### Next
 
-The watcher and the incremental update, where section hashes start earning their
-keep: a new document arrives, only affected sections are recomposed, and every
-other section is asserted byte-identical. Then LangGraph checkpointing for
-behaviour 2 (kill mid-run, resume), the concurrency test for behaviour 9, and
-the MCP server so the machine interface exists in the shape the brief calls
-strongest.
+LangGraph checkpointing for behaviour 2 (kill mid-run, resume), the concurrency
+test for behaviour 9, then the MCP server. After that: the examine stage against
+the rules playbook, the React review UI, and the second corpus.
 
