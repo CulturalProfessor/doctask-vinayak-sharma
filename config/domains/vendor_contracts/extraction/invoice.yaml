@@ -1,0 +1,41 @@
+# Invoices are where the contract meets reality, and where most of the
+# interesting disagreements live: a rate that was amended but never applied,
+# hours above a cap, payment terms nobody told billing about.
+
+entity_key: "engagement:{counterparty_slug}"
+
+fields:
+  counterparty:
+    type: text
+    prompt: "The vendor issuing the invoice."
+    required: true
+
+  invoice_number:
+    type: text
+    prompt: "The invoice number as printed."
+
+  invoice_date:
+    type: date
+    prompt: "The date the invoice was issued."
+
+  service_period:
+    type: text
+    prompt: "The period of service the invoice covers."
+
+  hourly_rate:
+    type: money
+    prompt: "The hourly rate actually billed on this invoice."
+
+  hours_billed:
+    type: number
+    unit: hours
+    prompt: "The total number of hours billed."
+
+  amount_due:
+    type: money
+    prompt: "The total amount due."
+
+  payment_terms_days:
+    type: number
+    unit: days
+    prompt: "The payment terms stated on the invoice, in days."

@@ -1,0 +1,39 @@
+[project]
+name = "doctask"
+version = "0.1.0"
+description = "An agentic system that owns a pile of vendor contracts end to end"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.7",
+    "psycopg[binary]>=3.1",
+    "pyyaml>=6.0",
+    "fastapi>=0.111",
+    "uvicorn[standard]>=0.30",
+    "python-multipart>=0.0.9",
+    "pypdf>=4.2",
+    "python-docx>=1.1",
+    "beautifulsoup4>=4.12",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.2", "pytest-asyncio>=0.23", "ruff>=0.5"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# The suite must never need a key or a network. Anything that would reach out
+# is marked `live` and excluded by default.
+addopts = "-q -m 'not live'"
+markers = [
+    "live: touches a real API; excluded from the default run",
+    "db: needs Postgres from docker compose",
+]
+
+[tool.ruff]
+line-length = 100

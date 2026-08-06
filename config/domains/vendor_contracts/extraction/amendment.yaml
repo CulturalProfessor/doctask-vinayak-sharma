@@ -1,0 +1,42 @@
+# An amendment restates a subset of the MSA's fields. It uses the same field
+# names on purpose: that is what puts an amended rate into the same
+# reconciliation group as the original, so the disagreement is visible.
+
+entity_key: "engagement:{counterparty_slug}"
+
+fields:
+  counterparty:
+    type: text
+    prompt: "The vendor the amended agreement is with."
+    required: true
+
+  amendment_number:
+    type: number
+    prompt: "The amendment's sequence number."
+
+  effective_date:
+    type: date
+    prompt: "The date this amendment takes effect."
+
+  hourly_rate:
+    type: money
+    prompt: "The revised hourly rate, if the amendment changes it."
+
+  payment_terms_days:
+    type: number
+    unit: days
+    prompt: "Revised payment terms in days, if changed."
+
+  termination_notice_days:
+    type: number
+    unit: days
+    prompt: "Revised termination notice period in days, if changed."
+
+  liability_cap:
+    type: money
+    prompt: "Revised liability cap, if changed."
+
+  term_months:
+    type: number
+    unit: months
+    prompt: "Revised or extended term length in months, if changed."

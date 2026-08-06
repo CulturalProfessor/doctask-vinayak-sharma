@@ -1,0 +1,49 @@
+# How raw extracted values become comparable ones. Two facts can only be said
+# to disagree after they have been reduced to the same units.
+
+accepted_formats: [txt, md, html, pdf, docx]
+
+currency:
+  default: USD
+  symbols:
+    "$": USD
+    "US$": USD
+    "USD": USD
+    "€": EUR
+    "£": GBP
+    "₹": INR
+  # Cross-currency values are never silently converted. Comparing USD to EUR
+  # without a rate and a date is how you produce a confident wrong answer, so
+  # a mixed-currency group is raised as a conflict for a human instead.
+  convert_across_currencies: false
+
+duration:
+  units:
+    day: days
+    days: days
+    business day: business_days
+    business days: business_days
+    week: weeks
+    weeks: weeks
+    month: months
+    months: months
+    year: years
+    years: years
+  # Business days are not calendar days. Rather than guess a calendar, values
+  # in different units are compared only through this table.
+  to_days:
+    days: 1
+    business_days: 1.4
+    weeks: 7
+    months: 30.44
+    years: 365.25
+
+date:
+  # Ordering matters: 03/04/2026 is ambiguous, and this pile is US-drafted.
+  formats:
+    - "%d %B %Y"
+    - "%B %d, %Y"
+    - "%Y-%m-%d"
+    - "%m/%d/%Y"
+    - "%d/%m/%Y"
+  ambiguous_numeric_dates: flag

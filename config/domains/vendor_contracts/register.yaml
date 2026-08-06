@@ -1,0 +1,47 @@
+# The shape of the deliverable: an obligations and commercials register.
+# One row per term, every cell citing the span it came from.
+
+title: "Obligations and Commercials Register"
+
+# Sections are the unit of change. An incremental update rewrites only the
+# sections a new document actually affects, and every other section keeps its
+# content hash -- which is how "nothing else changed" becomes provable rather
+# than promised.
+sections:
+  - key: parties
+    heading: "Parties and Agreement"
+    fields: [counterparty, effective_date, term_months, auto_renews]
+
+  - key: commercials
+    heading: "Commercial Terms"
+    fields: [hourly_rate, payment_terms_days, hours_cap, total_value]
+
+  - key: risk
+    heading: "Risk and Exit"
+    fields: [liability_cap, termination_notice_days]
+
+  - key: billing
+    heading: "Billing Activity"
+    fields: [invoice_number, invoice_date, service_period, hours_billed, amount_due]
+
+  - key: disagreements
+    heading: "Where the Documents Disagree"
+    source: conflicts
+
+  - key: gaps
+    heading: "What Could Not Be Established"
+    source: gaps
+
+columns:
+  - field: term
+    heading: "Term"
+  - field: value
+    heading: "Value"
+  - field: source
+    heading: "Source"
+  - field: citation
+    heading: "Where it says so"
+
+# A cell with no citation is not rendered as a blank -- it is rendered as an
+# explicit gap. The system does not get to imply it knows something it does not.
+uncited_cell_behaviour: render_as_gap

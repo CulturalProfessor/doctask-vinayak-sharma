@@ -1,0 +1,41 @@
+# How facts are grouped, and what counts as a disagreement.
+
+# Facts sharing (entity_key, field) form one group. A group with more than one
+# distinct normalised value is a conflict.
+group_by: [entity_key, field]
+
+# Later types supersede earlier ones. This ranking produces a *proposed*
+# resolution attached to the conflict -- it is never applied on its own. The
+# conflict still goes to the human gate. See PLAN.md section 2.
+#
+# Ordered by contractual authority, not by recency. An amendment supersedes the
+# agreement it amends, and the agreement supersedes a statement of work issued
+# under it. An invoice ranks lowest on purpose: it is evidence of what was
+# billed, never authority on what the rate should have been. Ranking invoices
+# highest would propose the billing error as the correct answer.
+precedence: [invoice, notice, sow, msa, amendment]
+
+# Values within tolerance of each other are the same value, not a conflict.
+# Without this, a rounded total on an invoice reads as a disagreement.
+tolerance:
+  money:
+    relative: 0.005
+  number:
+    relative: 0.001
+  duration_days:
+    absolute: 0
+
+# Fields where documents are *expected* to differ over time. A rate that
+# changed in an amendment is history, not a contradiction -- unless a document
+# dated after the change still uses the old value, which is the case worth
+# raising.
+time_varying_fields:
+  - hourly_rate
+  - payment_terms_days
+  - termination_notice_days
+  - liability_cap
+  - term_months
+
+# Above this many open conflicts, the run escalates as a whole rather than
+# flooding the gate with individual items.
+escalate_above: 25

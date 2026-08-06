@@ -1,0 +1,22 @@
+ACME FABRICATION SERVICES LLC
+1180 Foundry Road, Toledo, OH 43604
+
+INVOICE
+
+Invoice Number:   ACM-1043
+Invoice Date:     5 August 2026
+Bill To:          Brightwell Manufacturing Inc.
+Reference:        SOW-014 under MSA dated 1 March 2026
+
+Service Period:   1 July 2026 - 31 July 2026
+
+Description                                Hours      Rate        Amount
+-------------------------------------------------------------------------
+Series-7 bracket fabrication                 160    USD 120    USD 19,200
+-------------------------------------------------------------------------
+                                                  Total Due    USD 19,200
+
+Payment Terms:    Net 45 days from receipt.
+Remit payment to: Acme Fabrication Services LLC, acct ending 4417.
+
+Questions regarding this invoice should be directed to billing@acmefab.example.

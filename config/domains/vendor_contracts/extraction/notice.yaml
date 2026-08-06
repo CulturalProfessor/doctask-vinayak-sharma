@@ -1,0 +1,24 @@
+entity_key: "engagement:{counterparty_slug}"
+
+fields:
+  counterparty:
+    type: text
+    prompt: "The vendor the notice concerns."
+    required: true
+
+  notice_type:
+    type: text
+    prompt: "Whether this is a termination, non-renewal, or renewal notice."
+
+  notice_date:
+    type: date
+    prompt: "The date the notice was given."
+
+  effective_date:
+    type: date
+    prompt: "The date the termination or renewal takes effect."
+
+  notice_period_days:
+    type: number
+    unit: days
+    prompt: "The notice period the sender claims to be observing, in days."

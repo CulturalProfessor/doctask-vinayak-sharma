@@ -1,0 +1,45 @@
+# The taxonomy for a vendor-contracting pile.
+#
+# Adding a document type is an edit to this file plus one extraction schema.
+# No Python. If a new type needs code, the design is wrong -- see TASK.md.
+
+doc_types:
+  msa:
+    label: Master Services Agreement
+    extraction: msa
+    hints:
+      - "master services agreement"
+      - "this agreement is entered into"
+      - "governing terms between the parties"
+
+  amendment:
+    label: Amendment
+    extraction: amendment
+    hints:
+      - "amendment no"
+      - "amends the master services agreement"
+      - "all other terms remain in full force"
+
+  sow:
+    label: Statement of Work
+    extraction: sow
+    hints:
+      - "statement of work"
+      - "scope of services"
+      - "deliverables and milestones"
+
+  invoice:
+    label: Invoice
+    extraction: invoice
+    hints:
+      - "invoice number"
+      - "amount due"
+      - "remit payment to"
+
+  notice:
+    label: Renewal or Termination Notice
+    extraction: notice
+    hints:
+      - "notice of termination"
+      - "notice of non-renewal"
+      - "intent to renew"

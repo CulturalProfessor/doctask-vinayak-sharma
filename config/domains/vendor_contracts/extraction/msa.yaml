@@ -1,0 +1,43 @@
+# Fields to pull from a Master Services Agreement.
+#
+# `entity_key` binds every fact to the engagement it describes, which is how
+# facts from different documents end up in the same reconciliation group.
+
+entity_key: "engagement:{counterparty_slug}"
+
+fields:
+  counterparty:
+    type: text
+    prompt: "The vendor or supplier the agreement is with, as written."
+    required: true
+
+  effective_date:
+    type: date
+    prompt: "The date the agreement takes effect."
+
+  term_months:
+    type: number
+    unit: months
+    prompt: "The length of the initial term in months."
+
+  hourly_rate:
+    type: money
+    prompt: "The standard hourly rate for services, with its currency."
+
+  payment_terms_days:
+    type: number
+    unit: days
+    prompt: "How many days after receipt an invoice is payable."
+
+  termination_notice_days:
+    type: number
+    unit: days
+    prompt: "How many days of written notice either party must give to terminate."
+
+  liability_cap:
+    type: money
+    prompt: "The cap on aggregate liability, if one is stated."
+
+  auto_renews:
+    type: text
+    prompt: "Whether the agreement renews automatically, and on what terms."

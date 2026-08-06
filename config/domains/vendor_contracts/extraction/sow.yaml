@@ -1,0 +1,32 @@
+entity_key: "engagement:{counterparty_slug}"
+
+fields:
+  counterparty:
+    type: text
+    prompt: "The vendor performing the work."
+    required: true
+
+  sow_number:
+    type: text
+    prompt: "The statement of work's identifier."
+
+  start_date:
+    type: date
+    prompt: "The date work begins."
+
+  end_date:
+    type: date
+    prompt: "The date work is scheduled to complete."
+
+  hours_cap:
+    type: number
+    unit: hours
+    prompt: "The maximum billable hours authorised, if capped."
+
+  hourly_rate:
+    type: money
+    prompt: "The rate stated for this engagement, if the SOW restates one."
+
+  total_value:
+    type: money
+    prompt: "The total contract value of this statement of work."
