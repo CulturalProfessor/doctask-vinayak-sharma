@@ -333,10 +333,56 @@ narrate before answering. Scoped so it still raises on a refusal or an error
 message — a parser that always finds something would turn those into a silently
 empty result.
 
+---
+
+## 2026-08-07 (evening) — the first grounded register exists
+
+`python -m scripts.run_pile --pile pile_acme --out register.md`, offline, no key:
+48 facts, 0 gaps, **3 conflicts**, every cell citing a real span.
+
+### The design bug the first real run exposed
+
+Grouping every field by `(entity_key, field)` produced **nine** conflicts, six of
+them noise: three invoices legitimately carry three invoice numbers, three dates,
+three amounts. That is precisely the failure the screening rails were built to
+avoid, arriving through a different door — six false conflicts alongside three
+real ones is worse than no detection at all, because the reviewer stops reading.
+
+Fix is config, not code: `instance_fields` declares which fields describe the
+document instance rather than the engagement. `hourly_rate` and
+`payment_terms_days` are deliberately *absent* from that list, because an invoice
+restating them differently is exactly the finding worth having. Config validation
+now rejects a typo in the list, since a misspelt field silently re-enables the
+noise and nobody notices until a demo.
+
+Result: exactly the three planted disagreements, each with the right proposal —
+the amendment's rate over the MSA's and the stale invoice's, the raised liability
+cap, and invoice 1043's Net 45 against the agreement's 30 days.
+
+### Two display bugs
+
+Text values casefold for comparison, and that form was being rendered into a
+document a human reads (`acme fabrication services llc`). `display` is now
+separate from `canonical`: machines group on one, people read the other. And the
+markdown table separator row was one character wider than its header, misaligning
+every table in the deliverable.
+
+### Proven, not asserted
+
+- **Determinism.** Identical facts render identical bytes across runs.
+- **Localised change.** Editing one fact changes only the hash of the section
+  holding it. This is the property the whole "an update should cost like an
+  update" claim will be built on, and it is now a test rather than an intention.
+- **Honest zero.** A pile whose facts all agree renders "No disagreements found",
+  and the no-findings path has its own test.
+- **Cost by stage.** `report.cost_by_stage()` gives calls, ms and tokens per
+  stage — behaviour 10 falling out of the same record that makes stages
+  watchable (behaviour 1).
+
 ### Next
 
-`compose` (register sections with content hashes and citations), fact and span
-persistence, and the run orchestration that strings the stages together. All of
-it can be demonstrated offline with `ScriptedProvider` to prove the wiring; only
-the *real* register over the Acme pile needs a key.
+Fact and span persistence to Postgres (the stages are pure and currently run in
+memory), then the human gate: proposals, per-item approve/reject, commit, audit.
+After that the watcher and incremental update, where the section hashes start
+earning their keep.
 
