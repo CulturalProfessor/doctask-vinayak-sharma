@@ -122,6 +122,54 @@ def execute_quarantine(conn: psycopg.Connection, document_id: str, note: str) ->
     """, (note[:2000], document_id))
 
 
+def set_document_type(conn: psycopg.Connection, document_id: str, doc_type: str | None,
+                      confidence: float, status: str = "classified") -> None:
+    execute(conn, """
+        UPDATE document SET doc_type = %s, doc_type_conf = %s, status = %s WHERE id = %s
+    """, (doc_type, confidence, status, document_id))
+
+
+def load_sourced_facts(conn: psycopg.Connection, cfg, pile_id: str,
+                       exclude_document_id: str | None = None) -> list[SourcedFact]:
+    """Rebuild the pile's facts from storage.
+
+    Normalised values are recomputed from `value_raw` rather than read back from
+    a stored column. Normalisation is deterministic, so recomputing keeps one
+    source of truth: a change to a currency rule or a tolerance takes effect on
+    the next run instead of leaving old rows normalised under the old rules.
+    """
+    from app.domain.normalize import normalise
+    from app.domain.spans import SpanMatch
+    from app.stages.extract import ExtractedFact
+
+    rows = fetch_all(conn, """
+        SELECT f.*, s.char_start, s.char_end, s.text AS span_text,
+               d.filename, d.doc_type, d.id AS doc_id
+        FROM fact f
+        JOIN span s     ON s.id = f.span_id
+        JOIN document d ON d.id = f.document_id
+        WHERE f.pile_id = %s AND (%s::uuid IS NULL OR d.id <> %s::uuid)
+        ORDER BY d.filename, f.field, s.char_start
+    """, (pile_id, exclude_document_id, exclude_document_id))
+
+    out: list[SourcedFact] = []
+    for row in rows:
+        span = SpanMatch(row["char_start"], row["char_end"], row["span_text"],
+                         "stored", 1.0)
+        out.append(SourcedFact(
+            document=row["filename"], doc_type=row["doc_type"] or "unknown",
+            entity_key=row["entity_key"],
+            fact=ExtractedFact(
+                field_name=row["field"], value_raw=row["value_raw"], quote=row["span_text"],
+                span=span,
+                normalised=normalise(row["value_type"], row["value_raw"], cfg.normalization),
+                value_type=row["value_type"], unit=row["unit"],
+                confidence=float(row["confidence"]),
+            ),
+        ))
+    return out
+
+
 def facts_for_pile(conn: psycopg.Connection, pile_id: str) -> list[dict[str, Any]]:
     return fetch_all(conn, """
         SELECT f.*, s.char_start, s.char_end, s.text AS span_text, d.filename, d.doc_type
@@ -152,6 +200,18 @@ def persist_conflicts(conn: psycopg.Connection, pile_id: str,
 
 
 # ------------------------------------------------------------- proposals --
+
+def known_entity_keys(conn: psycopg.Connection, pile_id: str) -> list[str]:
+    return [row["entity_key"] for row in fetch_all(conn, """
+        SELECT DISTINCT entity_key FROM fact WHERE pile_id = %s ORDER BY entity_key
+    """, (pile_id,))]
+
+
+def open_conflict_keys(conn: psycopg.Connection, pile_id: str) -> list[dict[str, Any]]:
+    return fetch_all(conn, """
+        SELECT entity_key, field FROM conflict WHERE pile_id = %s AND status = 'open'
+    """, (pile_id,))
+
 
 def create_proposal(conn: psycopg.Connection, pile_id: str, run_id: str, kind: str,
                     summary: str, payload: dict, ref_id: str | None = None) -> str:
@@ -225,6 +285,7 @@ def commit_approved(conn: psycopg.Connection, pile_id: str, run_id: str,
     }
 
     written = 0
+    touched: set[str] = set()
     for proposal in approved:
         payload = proposal["payload"]
         if proposal["kind"] == "section_patch":
@@ -244,9 +305,31 @@ def commit_approved(conn: psycopg.Connection, pile_id: str, run_id: str,
                   section.content_hash, run_id, payload.get("cause_document_id"),
                   proposal["id"]))
             written += 1
+            touched.add(section.key)
         elif proposal["kind"] == "conflict" and proposal["ref_id"]:
             execute(conn, "UPDATE conflict SET status = 'approved' WHERE id = %s",
                     (proposal["ref_id"],))
+
+    # Carry forward every section this run did not touch, at its existing hash.
+    #
+    # An incremental run only proposes what changed, so without this the new
+    # version would contain the one section that moved and silently lose the
+    # five that did not. Carried sections get no audit row: nothing changed
+    # about them, and claiming otherwise would make the trail lie.
+    carried = 0
+    for row in fetch_all(conn, """
+        SELECT s.section_key, s.ordinal, s.body, s.content_hash
+        FROM section s JOIN deliverable d ON d.id = s.deliverable_id
+        WHERE d.pile_id = %s AND d.version = %s
+    """, (pile_id, version - 1)):
+        if row["section_key"] in touched:
+            continue
+        execute(conn, """
+            INSERT INTO section (deliverable_id, section_key, ordinal, body, content_hash)
+            VALUES (%s, %s, %s, %s, %s)
+        """, (deliverable_id, row["section_key"], row["ordinal"], row["body"],
+              row["content_hash"]))
+        carried += 1
 
     for proposal in rejected:
         if proposal["kind"] == "conflict" and proposal["ref_id"]:
@@ -259,7 +342,7 @@ def commit_approved(conn: psycopg.Connection, pile_id: str, run_id: str,
     set_run_status(conn, run_id, "committed")
     return {
         "deliverable_id": deliverable_id, "version": version,
-        "sections_written": written,
+        "sections_written": written, "sections_carried": carried,
         "approved": len(approved), "rejected": len(rejected),
     }
 

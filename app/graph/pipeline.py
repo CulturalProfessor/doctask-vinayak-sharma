@@ -62,6 +62,14 @@ def run_understand(conn: psycopg.Connection, provider: Provider, cfg: DomainConf
             model=event.usage.model, detail={"note": event.detail} if event.detail else None,
         )
 
+    # Record what each document was classified as. Without this the document
+    # rows keep doc_type NULL, and an incremental run rebuilding facts from
+    # storage would lose the precedence information reconciliation depends on.
+    for name, state in report.classified_types.items():
+        document_id = by_filename.get(name)
+        if document_id:
+            repo.set_document_type(conn, document_id, state[0], state[1])
+
     facts_by_document: dict[str, list] = {}
     for sourced in report.facts:
         facts_by_document.setdefault(sourced.document, []).append(sourced)

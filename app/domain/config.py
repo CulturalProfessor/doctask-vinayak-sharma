@@ -148,7 +148,7 @@ def _validate(cfg: DomainConfig) -> None:
     known_fields = {
         name for schema in cfg.extraction.values() for name in schema.get("fields", {})
     }
-    for key in ("instance_fields", "time_varying_fields"):
+    for key in ("instance_fields", "time_varying_fields", "identity_fields"):
         unknown = [f for f in cfg.reconciliation.get(key, []) if f not in known_fields]
         if unknown:
             raise ConfigError(

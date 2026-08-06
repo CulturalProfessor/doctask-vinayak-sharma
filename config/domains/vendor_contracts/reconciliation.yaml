@@ -52,6 +52,16 @@ instance_fields:
   - notice_period_days
   - total_value
 
+# Fields used to establish which engagement a document belongs to.
+#
+# Excluded from conflict detection because entity resolution has already settled
+# the question they would raise. Amendment 2 names both parties and the MSA
+# names one; resolution attached them to the same engagement, so also reporting
+# "the documents disagree about the counterparty" is a second bite at a decision
+# already made, and it is noise in front of the reviewer.
+identity_fields:
+  - counterparty
+
 # Fields where documents are *expected* to differ over time. A rate that
 # changed in an amendment is history, not a contradiction -- unless a document
 # dated after the change still uses the old value, which is the case worth
@@ -66,3 +76,31 @@ time_varying_fields:
 # Above this many open conflicts, the run escalates as a whole rather than
 # flooding the gate with individual items.
 escalate_above: 25
+
+# Which engagement a document belongs to.
+#
+# The model names a party; it does not get to decide identity. A real run had
+# amendment 1 answer "Acme Fabrication Services LLC" and amendment 2 answer
+# "Brightwell Manufacturing Inc. and Acme Fabrication Services LLC" for the same
+# field in near-identical documents. Both are defensible readings, and they slug
+# to different keys -- which would have split the pile in two and hidden every
+# conflict between them.
+entity:
+  # Legal forms and connectives that vary between documents describing the same
+  # party. Dropped before comparing names.
+  stopwords:
+    [inc, incorporated, llc, llp, ltd, limited, corp, corporation, co, company,
+     plc, gmbh, pty, and, the]
+
+  # Explicit human decisions, which outrank any inference below them. Add a
+  # spelling here when resolution guesses wrong rather than editing code.
+  aliases: {}
+    # acme-fabrication-services-llc:
+    #   - "Acme Fabrication"
+    #   - "Acme Fab Services"
+
+# The field that says when a document's terms take effect. Used only to break a
+# tie between documents of equal authority -- two amendments both outrank the
+# agreement they amend, so type alone cannot say which governs, but the later
+# one supersedes the earlier and the documents say so themselves.
+effective_date_field: effective_date

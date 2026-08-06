@@ -1,0 +1,11 @@
+{
+  "purpose": "extract",
+  "prompt_preview": "Document type: amendment\nFilename: amendment_02.md\n\nFields to extract:\n  counterparty (text) [required] -- The vendor the amended agreement is with.\n  amendment_number (number) -- The amendment's sequence number.\n  effective_date (date) -- The date this amendment takes effect.\n  hourly_rate (money) -- The revised hourly rate, if the amendment changes it.\n  payment_terms_days (number) [unit: days] -- Revised payment terms in days, if changed.\n  termination_notice_days (number) [unit: days] -- Rev",
+  "text": "{\"fields\": {\"counterparty\": {\"value\": \"Brightwell Manufacturing Inc. and Acme Fabrication Services LLC\", \"quote\": \"Between: Brightwell Manufacturing Inc. and Acme Fabrication Services LLC\", \"confidence\": 0.95}, \"amendment_number\": {\"value\": \"2\", \"quote\": \"AMENDMENT NO. 2\", \"confidence\": 0.99}, \"effective_date\": {\"value\": \"1 December 2026\", \"quote\": \"This Amendment No. 2 is effective as of 1 December 2026.\", \"confidence\": 0.99}, \"hourly_rate\": {\"value\": \"USD 145 per hour\", \"quote\": \"the standard hourly rate is USD 145 per hour\", \"confidence\": 0.99}, \"termination_notice_days\": {\"value\": \"90\", \"quote\": \"upon ninety (90) days prior written notice\", \"confidence\": 0.99}}}",
+  "usage": {
+    "tokens_in": 749,
+    "tokens_out": 950,
+    "cost_usd": 0.0,
+    "model": "nvidia/nemotron-3-ultra-550b-a55b:free"
+  }
+}

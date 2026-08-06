@@ -16,6 +16,7 @@ case and be invisibly wrong on the interesting one.
 from __future__ import annotations
 
 from dataclasses import dataclass, field as dc_field
+from datetime import date
 from typing import Iterable
 
 from app.domain.config import DomainConfig
@@ -62,13 +63,17 @@ class ReconcileResult:
 
 
 def reconcile(cfg: DomainConfig, facts: Iterable[SourcedFact]) -> ReconcileResult:
+    facts = list(facts)
     groups: dict[tuple[str, str], list[SourcedFact]] = {}
     for sourced in facts:
         groups.setdefault((sourced.entity_key, sourced.field), []).append(sourced)
 
+    effective_dates = _effective_dates(cfg, facts)
+
     result = ReconcileResult()
     time_varying = set(cfg.reconciliation.get("time_varying_fields", []))
     instance_fields = set(cfg.reconciliation.get("instance_fields", []))
+    instance_fields |= set(cfg.reconciliation.get("identity_fields", []))
 
     for (entity_key, field), members in sorted(groups.items()):
         if field in instance_fields:
@@ -94,7 +99,7 @@ def reconcile(cfg: DomainConfig, facts: Iterable[SourcedFact]) -> ReconcileResul
                                                    m.document)),
             time_varying=field in time_varying,
         )
-        conflict.proposed, conflict.rationale = _propose(cfg, conflict)
+        conflict.proposed, conflict.rationale = _propose(cfg, conflict, effective_dates)
         result.conflicts.append(conflict)
 
     ceiling = cfg.reconciliation.get("escalate_above")
@@ -107,6 +112,25 @@ def reconcile(cfg: DomainConfig, facts: Iterable[SourcedFact]) -> ReconcileResul
             f"{ceiling}; escalating the run rather than flooding the gate"
         )
     return result
+
+
+def _effective_dates(cfg: DomainConfig, facts: list[SourcedFact]) -> dict[str, "date"]:
+    """When each document's terms take effect, keyed by document.
+
+    Used only to break a tie between documents of equal authority. Two
+    amendments both outrank the agreement they amend, so doc_type alone cannot
+    say which governs -- but amendment 2 supersedes amendment 1, and the
+    documents say so themselves.
+    """
+    field_name = cfg.reconciliation.get("effective_date_field", "effective_date")
+    out: dict[str, date] = {}
+    for sourced in facts:
+        if sourced.field != field_name:
+            continue
+        normalised = sourced.fact.normalised
+        if normalised is not None and normalised.as_date is not None:
+            out[sourced.document] = normalised.as_date
+    return out
 
 
 def _cluster(members: list[SourcedFact], cfg: DomainConfig) -> list[list[SourcedFact]]:
@@ -129,29 +153,54 @@ def _cluster(members: list[SourcedFact], cfg: DomainConfig) -> list[list[Sourced
     return clusters
 
 
-def _propose(cfg: DomainConfig, conflict: Conflict) -> tuple[SourcedFact | None, str]:
+def _propose(cfg: DomainConfig, conflict: Conflict,
+             effective_dates: dict[str, "date"] | None = None) -> tuple[SourcedFact | None, str]:
     """Suggest which member should govern, and say why.
 
-    Returns no proposal when the ranking cannot separate the candidates. An
-    arbitrary pick dressed as a recommendation is worse than an admission that
-    the documents do not settle it.
+    Returns no proposal when nothing in the documents separates the candidates.
+    An arbitrary pick dressed as a recommendation is worse than an admission
+    that the documents do not settle it.
     """
+    effective_dates = effective_dates or {}
     ranked = sorted(conflict.members, key=lambda m: cfg.precedence_of(m.doc_type),
                     reverse=True)
     top = ranked[0]
     rank = cfg.precedence_of(top.doc_type)
     tied = [m for m in ranked if cfg.precedence_of(m.doc_type) == rank]
+    dated = "" 
 
     if len({m.canonical for m in tied}) > 1:
-        return None, (
-            f"{len(tied)} documents of equal authority ({top.doc_type}) state different "
-            f"values; the documents do not settle this and a person must choose"
-        )
+        # Equal authority, different values. Before giving up, ask the documents
+        # themselves: a later amendment supersedes an earlier one, and both say
+        # when they take effect.
+        with_dates = [(effective_dates.get(m.document), m) for m in tied]
+        if all(d is not None for d, _ in with_dates):
+            latest = max(d for d, _ in with_dates)
+            leaders = [m for d, m in with_dates if d == latest]
+            if len({m.canonical for m in leaders}) == 1:
+                top = leaders[0]
+                dated = (f". Two documents of equal authority disagreed; "
+                         f"{top.document} is the later, effective {latest.isoformat()}, "
+                         f"and supersedes the earlier")
+            else:
+                return None, (
+                    f"{len(leaders)} documents of equal authority take effect on the "
+                    f"same date ({latest.isoformat()}) and state different values; "
+                    f"the documents do not settle this and a person must choose"
+                )
+        else:
+            undated = [m.document for d, m in with_dates if d is None]
+            return None, (
+                f"{len(tied)} documents of equal authority ({top.doc_type}) state "
+                f"different values, and {', '.join(undated)} does not state an "
+                f"effective date; the documents do not settle this and a person "
+                f"must choose"
+            )
 
     others = ", ".join(sorted({f"{m.doc_type} says {m.canonical}"
                                for m in conflict.members if m.canonical != top.canonical}))
     rationale = (f"{top.doc_type} ({top.document}) carries the highest contractual "
-                 f"authority here and states {top.canonical}; {others}")
+                 f"authority here and states {top.canonical}; {others}{dated}")
     if conflict.time_varying:
         rationale += (". This field is expected to change over time, so the "
                       "disagreement may be historical rather than an error -- "

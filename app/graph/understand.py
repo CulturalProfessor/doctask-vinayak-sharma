@@ -47,6 +47,9 @@ class RunReport:
     escalated: list[tuple[str, str]] = dc_field(default_factory=list)
     reconciliation: ReconcileResult | None = None
     register: Register | None = None
+    # filename -> (doc_type, confidence), so the caller can record on the
+    # document rows what each one was judged to be.
+    classified_types: dict[str, tuple[str, float]] = dc_field(default_factory=dict)
 
     @property
     def total_usage(self) -> Usage:
@@ -109,6 +112,10 @@ def understand_pile(provider: Provider, cfg: DomainConfig,
             "classify", classification.path, path.name, timer.ms,
             classification.usage, classification.note,
         ))
+
+        if classification.path == "classified":
+            report.classified_types[path.name] = (classification.doc_type,
+                                                  classification.confidence)
 
         if classification.quarantine:
             # Leaves the extraction path entirely. Its content becomes something

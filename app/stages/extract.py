@@ -15,17 +15,16 @@ both are recorded.
 """
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass, field
 
 from app.domain.config import DomainConfig
 from app.domain.normalize import NormalisedValue, normalise
 from app.domain.spans import SpanMatch, find_span
 from app.llm.base import Provider, ProviderError, ProviderUnavailable, Usage
+from app.stages.entities import slugify
 from app.stages.prompts import extract_prompt
 
 MAX_ATTEMPTS = 2
-_SLUG = re.compile(r"[^a-z0-9]+")
 
 
 @dataclass
@@ -63,13 +62,17 @@ class ExtractionResult:
 
     @property
     def entity_key(self) -> str | None:
+        """Provisional. Identity is settled by `entities.resolve_entity` against
+        the engagements the pile already knows -- the model names a party, it
+        does not get to decide which engagement that is."""
         return self._entity_key
 
+    @property
+    def counterparty(self) -> str | None:
+        return next((f.value_raw for f in self.facts
+                     if f.field_name == "counterparty"), None)
+
     _entity_key: str | None = None
-
-
-def slugify(value: str) -> str:
-    return _SLUG.sub("-", (value or "").strip().casefold()).strip("-") or "unknown"
 
 
 def extract_document(provider: Provider, cfg: DomainConfig, doc_type: str, filename: str,

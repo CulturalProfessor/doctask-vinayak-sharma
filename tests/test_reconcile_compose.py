@@ -212,3 +212,62 @@ def test_the_run_records_which_path_each_stage_took(report):
     assert paths["classify:classified"] == 7
     assert paths["extract:extracted"] == 7
     assert paths["reconcile:reconciled"] == 1
+
+
+# ------------------------------------------- equal authority, later wins --
+
+def test_a_later_amendment_supersedes_an_earlier_one(cfg, report):
+    """Two amendments both outrank the agreement they amend, so doc_type alone
+    cannot separate them. The documents say when they take effect, and the later
+    one governs -- without this the system gives up exactly where a reviewer
+    most needs an answer."""
+    from datetime import date
+
+    from app.domain.models import SourcedFact
+    from app.stages.reconcile import reconcile
+
+    earlier = next(m for m in report.facts
+                   if m.field == "hourly_rate" and m.doc_type == "amendment")
+    assert earlier.canonical == "USD 135.00"
+    later = SourcedFact("amendment_02.md", "amendment", earlier.entity_key,
+                        _valued(cfg, earlier, "hourly_rate", "USD 145", "money"))
+    dates = [
+        SourcedFact("amendment_01.md", "amendment", earlier.entity_key,
+                    _valued(cfg, earlier, "effective_date", "1 June 2026", "date")),
+        SourcedFact("amendment_02.md", "amendment", earlier.entity_key,
+                    _valued(cfg, earlier, "effective_date", "1 December 2026", "date")),
+    ]
+    conflict = next(c for c in reconcile(cfg, [earlier, later] + dates).conflicts
+                    if c.field == "hourly_rate")
+    assert conflict.proposed is not None
+    assert conflict.proposed.document == "amendment_02.md"
+    assert "supersedes the earlier" in conflict.rationale
+
+
+def test_equal_authority_with_no_effective_date_still_refuses_to_guess(cfg, report):
+    """The tiebreak only applies when the documents actually settle it."""
+    from app.domain.models import SourcedFact
+    from app.stages.reconcile import reconcile
+
+    a = next(m for m in report.facts
+             if m.field == "hourly_rate" and m.doc_type == "invoice"
+             and m.canonical == "USD 120.00")
+    b = next(m for m in report.facts
+             if m.field == "hourly_rate" and m.doc_type == "invoice"
+             and m.canonical == "USD 135.00")
+    conflict = next(c for c in reconcile(cfg, [a, b]).conflicts if c.field == "hourly_rate")
+    assert conflict.proposed is None
+    assert "does not state an effective date" in conflict.rationale
+
+
+def _valued(cfg, template, field_name, text, value_type):
+    """A fact carrying `text`, reusing a real span so provenance stays intact."""
+    from app.domain.normalize import normalise
+    from app.stages.extract import ExtractedFact
+
+    return ExtractedFact(
+        field_name=field_name, value_raw=text, quote=template.fact.quote,
+        span=template.fact.span,
+        normalised=normalise(value_type, text, cfg.normalization),
+        value_type=value_type, unit=None, confidence=1.0,
+    )
