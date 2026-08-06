@@ -308,13 +308,30 @@ mock works" — but the end-to-end path deliberately does not use it.
   corpus documents plus eight legitimate clauses come back clean. A reviewer who
   sees false quarantines stops reading them, and then the real one goes through.
 
-### Blocked
+### Blocked — *resolved same day, no paid key needed*
 
-**No model provider key.** `.env` has `SUPERDOCS_API_KEY` only. Everything above
-is tested offline, but two things need real model calls: recording the fixtures
-the `FakeProvider` replays, and the first genuine end-to-end run over the Acme
-pile. Either an `ANTHROPIC_API_KEY` or a different provider behind the same
-`Provider` interface unblocks it.
+The fixtures needed real model output and `.env` had no model key. Rather than
+take a paid dependency: OpenRouter carries **17 models priced at zero**, and
+recording is a one-time act. Recorded the whole Acme pile on
+`nvidia/nemotron-3-ultra-550b-a55b:free` for **$0.0000** — 7/7 classified
+correctly, 48 facts, 0 gaps. Afterwards everything replays with no key and no
+network, which is what behaviour 7 actually asks for.
+
+No signup anywhere new; the existing OpenRouter key was enough, and the free
+tier rate-limits rather than bills, so the recorder backs off on 429 instead of
+failing. Anyone reproducing the repo can either replay the committed fixtures
+(no key at all) or re-record on the same free model.
+
+**Real model output validated a speculative design choice.** Five of the 48
+facts matched only after whitespace normalisation — including the MSA's
+`USD 120 per hour`, the single most important value in the pile. Until this run,
+the whitespace pass in `spans.py` was a defensible guess. It is now the thing
+standing between the demo and a silently missing central conflict.
+
+`Completion.json()` gained a balanced-brace fallback, because smaller models
+narrate before answering. Scoped so it still raises on a refusal or an error
+message — a parser that always finds something would turn those into a silently
+empty result.
 
 ### Next
 
