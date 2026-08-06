@@ -45,7 +45,14 @@ def test_no_deliverable_exists_before_anyone_decides(conn, pile, run):
     """A process killed at this point has written nothing to approve away."""
     assert fetch_one(conn, "SELECT count(*) AS n FROM deliverable WHERE pile_id = %s",
                      (pile,))["n"] == 0
-    assert fetch_one(conn, "SELECT count(*) AS n FROM section")["n"] == 0
+    # Scoped to this pile. An unscoped count passes only while the rest of the
+    # database happens to be empty, which makes it a test of the environment
+    # rather than of the gate.
+    assert fetch_one(conn, """
+        SELECT count(*) AS n FROM section s
+        JOIN deliverable d ON d.id = s.deliverable_id
+        WHERE d.pile_id = %s
+    """, (pile,))["n"] == 0
     assert fetch_one(conn, "SELECT count(*) AS n FROM audit WHERE pile_id = %s",
                      (pile,))["n"] == 0
 
