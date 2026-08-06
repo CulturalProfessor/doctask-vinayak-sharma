@@ -379,10 +379,60 @@ every table in the deliverable.
   stage — behaviour 10 falling out of the same record that makes stages
   watchable (behaviour 1).
 
+---
+
+## 2026-08-07 (night) — the gate holds; behaviours 3 and 4 done
+
+Persistence, the human gate, and the HTTP surface over both. Drove the entire
+flow with curl — start, review, decide, commit, report — with no UI involved,
+which is behaviour 4 satisfied by construction rather than retrofitted.
+
+### The failure shape worth remembering
+
+Ran the container before its recordings shipped in the image. All seven
+documents *escalated*, and the run reported **success with zero facts**. It
+looked healthy. Nothing errored.
+
+The cause: `MissingFixture` inherited from `ProviderError`, and the stages catch
+`ProviderError` to mean "the model gave an unusable answer, send it to a human".
+But a missing recording does not mean the document was hard to read — it means
+the deployment cannot reach a model at all. Those are different failures and
+they must not share a code path.
+
+Now split: `ProviderError` is unusable output (stages escalate, which is
+correct — a person should look at that document), `ProviderUnavailable` is
+unreachable (propagates and fails loudly). A broken deployment that looks
+healthy is the worst available failure shape, and it is exactly what behaviour 5
+forbids: a success message that does not mean the output is in the state it
+claims.
+
+Also moved recordings from `tests/fixtures/` to `recordings/`. They are not test
+data — they are what lets the demo and the container run with no key and no
+network, so they ship with the application.
+
+### Verified over HTTP, not asserted
+
+| Claim | Evidence |
+|---|---|
+| Nothing exists before review | `GET /register` → 404 while the run is open |
+| Cannot commit while undecided | `POST /commit` → 409, "9 proposals still pending" |
+| Per-item review works | Rejected the rate conflict, approved 8 others, in one call |
+| Rejection is respected | `hourly_rate` → rejected; `liability_cap`, `payment_terms_days` → approved |
+| Audit answers the question | 6 rows: section, from-hash, to-hash, run, timestamp |
+| Cost is reportable | `GET /report` — calls, ms, tokens and paths per stage |
+
+**Determinism holds across environments.** The section hashes the container
+committed (`f2094b8a`, `d87f2b4f`, `fdfdcea8`, `88ff8462`, `5695b9a8`,
+`fe71da09`) are byte-identical to those from a local venv run. That is the
+foundation the "an update touched nothing else" proof stands on, and it now
+holds across processes and machines rather than only within one.
+
 ### Next
 
-Fact and span persistence to Postgres (the stages are pure and currently run in
-memory), then the human gate: proposals, per-item approve/reject, commit, audit.
-After that the watcher and incremental update, where the section hashes start
-earning their keep.
+The watcher and the incremental update, where section hashes start earning their
+keep: a new document arrives, only affected sections are recomposed, and every
+other section is asserted byte-identical. Then LangGraph checkpointing for
+behaviour 2 (kill mid-run, resume), the concurrency test for behaviour 9, and
+the MCP server so the machine interface exists in the shape the brief calls
+strongest.
 
