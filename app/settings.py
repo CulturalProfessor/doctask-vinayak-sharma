@@ -47,7 +47,10 @@ class Settings:
     )
     watch_dir: Path = Path(os.environ.get("WATCH_DIR", str(REPO_ROOT / "corpora" / "inbox")))
     config_root: Path = REPO_ROOT / "config" / "domains"
-    fixture_root: Path = REPO_ROOT / "tests" / "fixtures" / "llm"
+    # Recorded model responses. Not test-only data -- these are what let the
+    # demo and the container run with no key and no network, so they ship
+    # with the application rather than living under tests/.
+    fixture_root: Path = REPO_ROOT / "recordings" / "llm"
     # Cost guardrails. A run stops rather than quietly spending.
     max_model_calls_per_run: int = int(os.environ.get("MAX_MODEL_CALLS_PER_RUN", "200"))
     sample_mode: bool = _flag("SAMPLE_MODE", False)

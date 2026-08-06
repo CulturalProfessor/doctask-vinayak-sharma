@@ -11,9 +11,11 @@ from fastapi import FastAPI, HTTPException, UploadFile
 
 from app.domain.config import ConfigError, load_domain
 from app.ingest.ingest import ensure_pile, ingest_bytes
+from app.api.runs import router as runs_router
 from app.store.engine import fetch_all, fetch_one, transaction
 
 app = FastAPI(title="doctask", version="0.1.0")
+app.include_router(runs_router)
 
 
 @app.get("/health")

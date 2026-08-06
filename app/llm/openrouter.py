@@ -16,7 +16,7 @@ import json
 import urllib.error
 import urllib.request
 
-from app.llm.base import Completion, Provider, ProviderError, Usage
+from app.llm.base import Completion, Provider, ProviderError, ProviderUnavailable, Usage
 from app.llm.fake import record
 from app.settings import settings
 
@@ -33,7 +33,7 @@ class OpenRouterProvider(Provider):
     def __init__(self, model: str | None = None, api_key: str | None = None) -> None:
         self.api_key = api_key or settings.openrouter_key
         if not self.api_key:
-            raise ProviderError(
+            raise ProviderUnavailable(
                 "LLM_PROVIDER=openrouter but OPEN_ROUTER_KEY is empty. "
                 "Use LLM_PROVIDER=fake to run offline against recorded responses."
             )
@@ -64,9 +64,9 @@ class OpenRouterProvider(Provider):
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode()[:400]
             hint = " (free-tier rate limit; wait and retry)" if exc.code in RETRYABLE else ""
-            raise ProviderError(f"OpenRouter HTTP {exc.code}{hint}: {detail}") from exc
+            raise ProviderUnavailable(f"OpenRouter HTTP {exc.code}{hint}: {detail}") from exc
         except urllib.error.URLError as exc:
-            raise ProviderError(f"OpenRouter unreachable: {exc.reason}") from exc
+            raise ProviderUnavailable(f"OpenRouter unreachable: {exc.reason}") from exc
 
         if "error" in payload and not payload.get("choices"):
             raise ProviderError(f"OpenRouter error: {str(payload['error'])[:300]}")

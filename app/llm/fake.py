@@ -13,12 +13,12 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from app.llm.base import Completion, Provider, ProviderError, Usage, call_key
+from app.llm.base import Completion, Provider, ProviderUnavailable, Usage, call_key
 from app.settings import settings
 
 
-class MissingFixture(ProviderError):
-    pass
+class MissingFixture(ProviderUnavailable):
+    """No recording for this call. The deployment cannot run offline."""
 
 
 class FakeProvider(Provider):

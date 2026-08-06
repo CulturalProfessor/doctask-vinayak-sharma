@@ -2,7 +2,7 @@
 deliberately; the default everywhere else is the recorded fake."""
 from __future__ import annotations
 
-from app.llm.base import Completion, Provider, ProviderError, Usage
+from app.llm.base import Completion, Provider, ProviderUnavailable, Usage
 from app.llm.fake import record
 from app.settings import settings
 
@@ -24,14 +24,14 @@ class AnthropicProvider(Provider):
 
     def __init__(self) -> None:
         if not settings.anthropic_api_key:
-            raise ProviderError(
+            raise ProviderUnavailable(
                 "LLM_PROVIDER=anthropic but ANTHROPIC_API_KEY is empty. "
                 "Use LLM_PROVIDER=fake to run offline against recorded responses."
             )
         try:
             from anthropic import Anthropic
         except ImportError as exc:  # optional dependency, on purpose
-            raise ProviderError(
+            raise ProviderUnavailable(
                 "the anthropic package is not installed; `pip install anthropic`, "
                 "or use LLM_PROVIDER=fake"
             ) from exc

@@ -16,7 +16,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from app.domain.config import DomainConfig
-from app.llm.base import Completion, Provider, ProviderError, Usage
+from app.llm.base import Completion, Provider, ProviderError, ProviderUnavailable, Usage
 from app.stages.prompts import classify_prompt
 from app.stages.screen import ScreenVerdict, screen_text
 
@@ -70,6 +70,10 @@ def classify_document(provider: Provider, cfg: DomainConfig, filename: str, text
         completion: Completion = provider.complete(purpose="classify", system=system,
                                                    user=user, max_tokens=512)
         payload = completion.json()
+    except ProviderUnavailable:
+        # The deployment is broken, not the document. Escalating here would
+        # report a healthy-looking run that understood nothing.
+        raise
     except ProviderError as exc:
         # An unreadable answer is not a classification. Escalating is the honest
         # outcome; picking the most common type would be a guess wearing a

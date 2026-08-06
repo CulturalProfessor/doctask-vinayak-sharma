@@ -14,7 +14,22 @@ from typing import Any, Protocol
 
 
 class ProviderError(RuntimeError):
-    pass
+    """The model returned something unusable.
+
+    A stage may reasonably escalate on this: the model is reachable, it just
+    did not answer in a form we can act on.
+    """
+
+
+class ProviderUnavailable(ProviderError):
+    """The model could not be reached at all.
+
+    Distinct from `ProviderError` on purpose. A missing recording, an absent
+    key, a dead network or an exhausted rate limit mean the *deployment* is
+    broken, not that the document was hard to read. Escalating those to a human
+    reviewer would report a healthy-looking run that quietly understood nothing
+    -- so stages let this propagate and fail loudly instead.
+    """
 
 
 class BudgetExceeded(ProviderError):

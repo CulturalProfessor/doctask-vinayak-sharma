@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 from app.domain.config import DomainConfig
 from app.domain.normalize import NormalisedValue, normalise
 from app.domain.spans import SpanMatch, find_span
-from app.llm.base import Provider, ProviderError, Usage
+from app.llm.base import Provider, ProviderError, ProviderUnavailable, Usage
 from app.stages.prompts import extract_prompt
 
 MAX_ATTEMPTS = 2
@@ -92,6 +92,9 @@ def extract_document(provider: Provider, cfg: DomainConfig, doc_type: str, filen
             result.usage = result.usage + completion.usage
             payload = completion.json()
             break
+        except ProviderUnavailable:
+            # Retrying a broken deployment just wastes the retry budget.
+            raise
         except ProviderError as exc:
             if attempt >= MAX_ATTEMPTS:
                 # Path change: give up on this document rather than accept

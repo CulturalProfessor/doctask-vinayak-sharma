@@ -13,6 +13,7 @@ RUN pip install --no-cache-dir -e . 2>/dev/null || \
 COPY app ./app
 COPY config ./config
 COPY corpora ./corpora
+COPY recordings ./recordings
 
 EXPOSE 8000
 CMD ["uvicorn", "app.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
