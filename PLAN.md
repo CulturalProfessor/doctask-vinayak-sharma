@@ -91,6 +91,13 @@ Orchestration is **LangGraph with a Postgres checkpointer**, so resumability is 
 property of the graph rather than bespoke state-machine code I have to defend in
 the write-up.
 
+> **Status, 7 Aug: not yet true.** `app/graph/` currently holds hand-rolled
+> sequencing. The four path-changing branches are real and behaviour 1 is
+> satisfied, but there is no checkpointing, so **behaviour 2 is not done**.
+> Stages were deliberately written as pure functions taking explicit arguments
+> so the port is a wrap rather than a rewrite. Decision on how far to go —
+> straight port versus adding a planner node — is deferred; see PROGRESS.md.
+
 ### The decisions that change the path
 
 The brief is explicit that a fixed script with stage labels is not an agentic

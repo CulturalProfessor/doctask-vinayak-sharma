@@ -484,9 +484,57 @@ refuses to guess.
 | Version 2 is complete | 4 written + 2 carried = 6 sections |
 | Audit names the cause | `commercials d87f2b4f → 96ec3a2b, cause=amendment_02.md` |
 
-### Next
+---
 
-LangGraph checkpointing for behaviour 2 (kill mid-run, resume), the concurrency
-test for behaviour 9, then the MCP server. After that: the examine stage against
-the rules playbook, the React review UI, and the second corpus.
+## PICK UP HERE
+
+### Open decision — orchestration framework
+
+PLAN.md commits to LangGraph in four places. It is **not in the code**: no
+dependency, no checkpointing, and `app/graph/` holds hand-rolled sequencing.
+PLAN.md now says so rather than implying otherwise.
+
+What exists is a fixed stage sequence with four genuine path-changing branches —
+retry-then-skip on malformed extraction, escalate on low classification
+confidence, quarantine on injection, escalate on ambiguous entity. That
+satisfies behaviour 1 as written ("a retry, a skip, an escalation to a person").
+It does **not** satisfy behaviour 2, which is one of the five uncuttable.
+
+Stages are pure functions taking explicit arguments, written that way on purpose
+so the port is a wrap and not a rewrite.
+
+Three options, undecided:
+
+1. **Straight LangGraph port** (recommended) — `StateGraph` + `PostgresSaver` +
+   `interrupt()` at the gate. Behaviour 2 becomes a framework property, the
+   stack matches theirs, branches stay as they are. Roughly half a day.
+2. **Add a planner node** — a supervisor decides which stages to run per
+   document rather than following a fixed order. More genuinely agentic and
+   stronger against "a fixed script with labels", but a day or more and new
+   failure modes to test.
+3. **Stay hand-rolled and defend it** — the brief explicitly permits a
+   hand-rolled loop; checkpointing would go on the `run`/`stage_event` tables
+   that already exist. Costs write-up space defending a divergence from their
+   working stack.
+
+Note for whichever is chosen: LangGraph checkpointing is per-thread, so the
+section-level locking behaviour 9 needs lives in our schema either way.
+
+### Remaining, in order
+
+1. Orchestration decision above → behaviour 2.
+2. Concurrency test → behaviour 9 (advisory locks are already in
+   `store/engine.py`, unused so far).
+3. MCP server → completes behaviour 4 in the shape the brief calls strongest.
+4. The examine stage against `rules/playbook.yaml` — the second movement.
+   Nothing consumes the playbook yet.
+5. React review UI (degradable to a minimal table; first item on the cut list).
+6. Second corpus `pile_northwind` — currently empty; seeding skips it gracefully.
+7. Tasks 2, 3, 4.
+
+### State as of 2026-08-07
+
+19 commits, 194 tests green offline, $0.00 spent. Behaviours 1, 3, 5, 6, 7, 8, 10
+done; 4 partial (HTTP yes, MCP no); 2 and 9 not started. Ahead of the PLAN.md
+schedule — that put "understand end to end" on 9–10 Aug and the gate on 13–14.
 
