@@ -260,3 +260,66 @@ forgotten when extraction lands.
 - The `api` service has no MCP counterpart yet. Behaviour 4 requires both
   surfaces to expose the same operations, including approval.
 
+---
+
+## 2026-08-07 (later) — UNDERSTAND stages built, 126 tests
+
+Five commits, each self-contained: `foundation`, `spans`, `normalize`,
+`screen`, `classify + extract`. All offline.
+
+### Decisions
+
+**A fact whose quote cannot be located is discarded.** Not kept with a weaker
+citation, not pointed at the whole page — discarded, and recorded as a gap. This
+throws away values that are probably correct. It is the right trade: a value
+that is probably correct and definitely uncitable is exactly what an ungrounded
+register is made of, and grounding is the entire claim of this system.
+
+**The poisoned document never reaches the model.** The deterministic screen runs
+*before* the classify call and short-circuits it. Spending a call interpreting a
+document we already know is trying to manipulate the interpreter would give the
+manipulation one chance to work. Asserted by a test that requires zero model
+calls. The model still gets an independent vote on injection afterwards, and
+either layer firing quarantines — regex can be evaded by novel phrasing, a model
+can be talked out of its judgement, and they do not fail together.
+
+**Two provider doubles, for two different jobs.** `FakeProvider` replays
+recordings of real model output, for end-to-end runs. `ScriptedProvider` (tests
+only) drives stages through responses that are awkward to obtain on demand:
+malformed JSON, an invented quote, a type outside the taxonomy, low confidence.
+Those branches are in *our* code, so testing them this way is not "proving the
+mock works" — but the end-to-end path deliberately does not use it.
+
+### Discovered while building
+
+- **Whitespace tolerance is not an edge case, it is the common case.** The
+  single most important value in the pile — the MSA's `USD 120 per hour` — wraps
+  across a line and is unfindable by `str.index`. Without the whitespace pass in
+  `spans.py`, the demo's central conflict would silently never be detected. My
+  own prompt strings hit the same trap in a test assertion an hour later.
+- **`Decimal.normalize()` produces scientific notation.** `Decimal("160")`
+  becomes `1.6E+2`, which would have put exponents in register cells and made
+  two spellings of one quantity compare unequal as strings. Fixed with a
+  fixed-point formatter.
+- **False positives are the real risk in injection screening, not misses.**
+  Contracts are dense with imperatives, approval claims and no-issue assertions —
+  the exact vocabulary the patterns hunt. Every pattern now requires a
+  system-referent rather than an imperative mood, and the suite asserts all seven
+  corpus documents plus eight legitimate clauses come back clean. A reviewer who
+  sees false quarantines stops reading them, and then the real one goes through.
+
+### Blocked
+
+**No model provider key.** `.env` has `SUPERDOCS_API_KEY` only. Everything above
+is tested offline, but two things need real model calls: recording the fixtures
+the `FakeProvider` replays, and the first genuine end-to-end run over the Acme
+pile. Either an `ANTHROPIC_API_KEY` or a different provider behind the same
+`Provider` interface unblocks it.
+
+### Next
+
+`compose` (register sections with content hashes and citations), fact and span
+persistence, and the run orchestration that strings the stages together. All of
+it can be demonstrated offline with `ScriptedProvider` to prove the wiring; only
+the *real* register over the Acme pile needs a key.
+
