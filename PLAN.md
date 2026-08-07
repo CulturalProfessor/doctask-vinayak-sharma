@@ -181,12 +181,12 @@ separate.
 | 1 | Visible stages, some decisions change the path | `stage_event` per node + SSE to the UI; four real branches above | Run log shows branch taken and why |
 | 2 | Survives being stopped | LangGraph Postgres checkpoint committed in the same transaction as the node's work; model answers recorded per run | Test: two real `SIGKILL`s mid-run — 14 answers bought across both processes, register byte-identical to an uninterrupted run |
 | 3 | A human holds the gate | `proposal` rows + graph `interrupt()`; per-item decisions | Test: reject one finding of three, other two survive |
-| 4 | A machine can drive it | MCP server + REST over identical operations; `approve` is a tool | Test: full run end to end, no browser |
+| 4 | A machine can drive it | MCP server + REST as thin surfaces over one `app/operations.py`; `decide` is a tool | Test: a pile driven from empty to committed register through MCP alone, mixed approve/reject in one review; a test asserts neither surface reaches past `operations` |
 | 5 | It never bluffs | Claims require ≥1 citation; composer refuses uncited output | Test: clean corpus → honest zero findings |
 | 6 | A stranger can run it | `docker compose up`, seeded | Fresh-clone rehearsal on day 11 |
 | 7 | Real tests, no live key | `LLM_PROVIDER=fake`, deterministic recorded provider | Whole suite green offline |
 | 8 | Takes no orders from documents | Quarantine branch | Poisoned fixture in the suite |
-| 9 | Two runs stay two runs | Advisory lock per pile; `SELECT … FOR UPDATE SKIP LOCKED` | Test: concurrent runs, same pile |
+| 9 | Two runs stay two runs | Session-scoped advisory lock per pile, held for a run's working phase and released across the gate | Test: two real processes contending — without the lock a reviewer gets 15 items where there are 9 |
 | 10 | Knows what it cost | `stage_event` tokens/cost/ms → `GET /runs/{id}/report` | Report printed in the demo |
 
 ### Configuration over code

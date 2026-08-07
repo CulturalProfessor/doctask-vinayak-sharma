@@ -601,44 +601,122 @@ payload, and behaviour 7 deserves better than an assumption.
 
 ---
 
+## 2026-08-07 (later still) — behaviours 9 and 4
+
+### Concurrency: the danger was not the crash
+
+Measured by removing the lock and running two real processes at one pile: the
+reviewer gets **fifteen proposals where there are nine**, with nothing erroring.
+The loud failures were easier to find and less dangerous than that one.
+
+The lock is session-scoped, and that is forced rather than preferred. A run's
+transaction now closes at every checkpoint, so a transaction-scoped lock would be
+dropped and retaken between every pair of stages — absent exactly when a second
+run is likeliest to slip through. Session scope also gets the failure case right
+for free: a killed process releases the pile when its socket closes, so
+behaviours 2 and 9 can hold at once. A dead run holding a pile against the
+process sent to resume it would break both.
+
+**The lock is not held across the gate.** A reviewer may take a week. The run
+gives the pile back when it halts and takes it again when resumed to commit,
+which is safe only because the commit-time hash check refuses approved bytes
+that no longer match.
+
+### Two bugs the contention test found, both worth more than the lock
+
+**The lock release was eating every error under it.** A failed run leaves its
+transaction aborted, so the unlock in the `finally` raised
+`InFailedSqlTransaction` and *replaced* the exception that actually killed the
+run. The first version of this test reported a transaction-state complaint and
+hid a `UniqueViolation` underneath it. Now it rolls back first — safe, a session
+lock does not belong to a transaction — and swallows whatever is left, because
+closing the connection releases the lock anyway.
+
+**Ingest reported a lost race as a fresh ingest.** With the real error visible:
+two overlapping ingests died on `page (document_id, page_no)`. The loser found
+the winner's document, was told nothing about having lost, and went on to insert
+pages for it. Fixed in ingest rather than hidden behind the lock, because
+`POST /piles/{id}/documents` has the same race with two clients uploading
+identical bytes.
+
+**And a claim I had to withdraw.** An earlier draft of the locking docstring said
+concurrent runs produce ninety-six facts and a register that looks fine. Running
+it showed that does not happen in this code. Corrected to the measured failure
+modes — writing the confident version would have been exactly what this repo is
+supposed to be against.
+
+### The machine surface, and who is on the other side of the gate
+
+Everything moved into `app/operations.py` before MCP was written. HTTP and MCP
+are now argument parsing and error mapping with no decision in either, and there
+are tests for both halves of that: every operation has a tool, and neither
+surface reaches past `operations` into the machinery. The reason is on the
+record already — a full run and an update were two code paths, and the identity
+fix landed on one. Two *review* surfaces failing that way would be worse,
+because the drift would be about who may approve what.
+
+Behaviour 3 says a person holds the gate. Behaviour 4 says a machine must be
+able to drive approval. Refusing to expose `decide` fails one; exposing it
+quietly makes "a human reviewed this" unfalsifiable. The answer taken: accept
+both and make the record unable to blur them. `decided_by` is who the caller
+names; `decided_via` is written by the surface and cannot be claimed. `decided_by`
+is now required with no default anywhere.
+
+What an agent still cannot do, structurally: commit anything unproposed, or
+commit content that differs from what was approved.
+
+Found while wiring MCP: `pipeline.resume` raises a bare `LookupError` for an
+unknown run and neither surface translated it, so resuming a nonexistent run
+would have been a 500 over HTTP rather than a 404. Converted once, in
+operations, where the pipeline's vocabulary stops.
+
+### Verified against the container, not only the suite
+
+`docker compose up`, then: seven documents, 48 facts, 3 conflicts, 9 proposals,
+the same six section hashes as every other run. Rejected the rate conflict and
+approved eight others in one call. **Restarted the API container**, then
+committed — six sections written, six audit rows. The register survives the
+process that composed it, which is the `_REGISTERS` hole closed and proven over
+HTTP rather than in a unit test.
+
+Two simultaneous `POST /runs` on one pile both returned 200: the second waited
+out the two-second window, found everything already ingested and proposed, and
+reported `no_change` with zero proposals. Two runs stayed two runs.
+
+---
+
 ## PICK UP HERE
 
 ### State as of 2026-08-07
 
-22 commits, 205 tests green offline, $0.00 spent. Behaviours 1, 2, 3, 5, 6, 7, 8,
-10 done; 4 partial (HTTP yes, MCP no); 9 not started. The orchestration decision
-is settled: straight LangGraph port, done, and the reasoning that mattered is in
-the entry above.
+25 commits, 222 tests green offline, $0.00 spent. **Behaviours 1–10 all done.**
+Verified against `docker compose up`, not only in the suite.
 
 ### Remaining, in order
 
-1. **Behaviour 9 — concurrency.** Two runs at once on the same pile stay two
-   runs. `advisory_lock` exists in `store/engine.py` and is still unused. One
-   thing already known: it uses `pg_advisory_xact_lock`, which is
-   transaction-scoped, and a run's transaction now closes at every checkpoint —
-   so the lock a run needs is the session-scoped `pg_advisory_lock`, taken on
-   the connection the run owns for its whole life. LangGraph's checkpointing is
-   per-thread and does not help here; the contention is at the section level and
-   the lock lives in our schema, as PLAN.md §6 predicted.
-2. **MCP server** → completes behaviour 4 in the shape the brief calls
-   strongest. Every operation already exists in `app/api/runs.py`, including
-   `resume`, so this is a second surface over the same calls rather than new
-   behaviour.
-3. **The EXAMINE stage** against `rules/playbook.yaml` — the second of the three
-   movements and the largest untouched gap. Nothing consumes the playbook yet.
-   It slots in as a node between `compose` and `delta`, and its findings become
-   proposals like everything else.
-4. React review UI (degradable to a minimal table; first item on the cut list).
-5. Second corpus `pile_northwind` — currently empty; seeding skips it gracefully.
-6. Tasks 2, 3, 4.
+1. **The EXAMINE stage** against `config/domains/vendor_contracts/rules/playbook.yaml`
+   — the second of the three movements the brief asks for and the largest
+   untouched gap. Nothing consumes the playbook yet. It slots in as a graph node
+   between `compose` and `delta`; findings become proposals like everything
+   else, and the `finding` and `finding_citation` tables already exist. The hard
+   part is named in PLAN.md §6: a clean pile has to produce an honest report of
+   nothing found, and models want to be helpful and will manufacture one.
+2. React review UI (degradable to a minimal table; first item on the cut list).
+   Every operation it needs is already in `app/operations.py`.
+3. Second corpus `pile_northwind` — currently empty; seeding skips it gracefully.
+4. Tasks 2, 3, 4.
 
 ### Notes for whoever picks this up
 
-- The graph is `app/graph/build.py`; read `checkpoint.py` and `state.py` first,
-  they carry the two decisions everything else follows from.
+- The graph is `app/graph/build.py`; read `checkpoint.py`, `locking.py` and
+  `state.py` first, they carry the decisions everything else follows from.
 - Nodes never call `commit()`. If a new node does, it has broken behaviour 2.
-- A node may run twice. Anything a node writes must be safe to write again, or
-  it belongs before the interrupt rather than after it — which is why `gate`
-  writes nothing and `propose` exists separately.
+- A node may run twice. Anything it writes must be safe to write again, or it
+  belongs before the interrupt rather than after it — which is why `gate` writes
+  nothing and `propose` exists separately.
 - State is plain JSON on purpose. If something needs a custom serialiser to
   cross a node boundary, load it from the database instead.
+- New capabilities go in `app/operations.py`, never in a surface. There are two
+  tests that will fail if a surface grows a decision of its own.
+- Recording fixtures is only needed if a *prompt* changes:
+  `LLM_PROVIDER=openrouter RECORD_FIXTURES=1 .venv/bin/python -m scripts.record_fixtures`
