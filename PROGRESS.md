@@ -893,7 +893,8 @@ recomposed and hashed*, which the screen says in those words.
 
 ### State as of 2026-08-07
 
-26 commits, 245 tests green offline, $0.00 spent. **Behaviours 1–10 all done**,
+31 commits (this one included — the count has been wrong twice by being written
+before the commit that carries it), 245 tests green offline, $0.00 spent. **Behaviours 1–10 all done**,
 **all three movements exist** — understand, examine, stay alive — and there are
 **three working surfaces** over one operations layer: HTTP, MCP, and a review UI
 at `/review/`. Verified against `docker compose up` from a cold, volume-less
