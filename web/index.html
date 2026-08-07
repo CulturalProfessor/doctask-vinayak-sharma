@@ -4,6 +4,15 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>doctask — review</title>
+    <!-- Applied before the bundle loads, and before first paint. React sets the
+         same attribute, but it does so after mount, which is one frame of a
+         bright white page for anyone using dark. -->
+    <script>
+      try {
+        var t = localStorage.getItem('doctask-theme')
+        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t)
+      } catch (e) { /* private mode: fall back to the system setting */ }
+    </script>
   </head>
   <body>
     <div id="root"></div>

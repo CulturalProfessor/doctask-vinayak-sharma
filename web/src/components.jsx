@@ -264,6 +264,7 @@ export function Register({ register }) {
 export function Audit({ audit }) {
   if (!audit?.audit?.length) return null
   return (
+    <div className="audit-wrap">
     <table className="audit">
       <thead>
         <tr>
@@ -282,5 +283,6 @@ export function Audit({ audit }) {
         ))}
       </tbody>
     </table>
+    </div>
   )
 }

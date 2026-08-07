@@ -1,31 +1,116 @@
 /* Plain CSS, no framework.
  *
- * The visual weight follows the review: quoted source text is the most legible
- * thing on the page, and everything that is a claim about the source is smaller
- * than the source. Colour is used for one thing only -- outcome -- so that
- * "violated", "rejected" and "quarantined" read the same way wherever they
- * appear. */
+ * Two things this file is responsible for beyond looking tidy.
+ *
+ * **Scrolling.** The page is an app shell, not a document: the header is fixed,
+ * and the sidebar and the review column scroll independently. The document
+ * layout it replaced put both in one page-length scroll, so working down a list
+ * of thirteen proposals took the pile controls, the run summary and the tab bar
+ * off screen -- and the reviewer lost the count of what they had decided at
+ * exactly the point they needed it. The review bar sticks to the bottom of its
+ * own scroller for the same reason.
+ *
+ * **Colour.** One palette, two themes, and every colour in the page comes from a
+ * variable. The theme follows the operating system and can be overridden by the
+ * toggle in the header, which stamps `data-theme` on the root element. Colour
+ * carries exactly one meaning -- outcome -- so "violated", "rejected" and
+ * "quarantined" read the same way wherever they appear, in either theme.
+ */
 
 :root {
-  --ink: #16181d;
-  --muted: #6b7280;
-  --line: #e3e5ea;
-  --paper: #ffffff;
-  --wash: #f6f7f9;
+  color-scheme: light;
+
+  --ink: #16181d;          /* body text */
+  --muted: #6b7280;        /* labels, secondary text */
+  --line: #e3e5ea;         /* borders and rules */
+  --paper: #ffffff;        /* card surfaces */
+  --wash: #f6f7f9;         /* page behind the cards */
+
   --accent: #1d4ed8;
   --good: #15803d;
   --bad: #b91c1c;
   --warn: #b45309;
+
+  /* Text that sits on a filled accent/good/bad button. */
+  --on-solid: #ffffff;
+
+  /* Faint fills and their edges, for banners and severity pills. */
+  --tint-accent: #eef2ff;  --edge-accent: #c7d2fe;
+  --tint-good: #f0fdf4;    --edge-good: #bbf7d0;
+  --tint-bad: #fef2f2;     --edge-bad: #fecaca;
+  --tint-warn: #fff7ed;    --edge-warn: #fed7aa;
+
+  --shadow: 0 1px 2px rgba(16, 24, 40, .04);
+
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
+/* The dark palette, declared twice on purpose: once for "the OS says dark and
+ * the user has not overridden it", once for "the user chose dark". CSS has no
+ * way to share one block between a media query and an attribute selector, and
+ * the alternative -- only honouring one of the two signals -- would either
+ * ignore the toggle or ignore the system setting. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+
+    --ink: #e6e8ec;
+    --muted: #969db0;
+    --line: #2b303b;
+    --paper: #171a21;
+    --wash: #0e1014;
+
+    --accent: #7da2ff;
+    --good: #4ade80;
+    --bad: #f87171;
+    --warn: #fbbf24;
+
+    --on-solid: #0e1014;
+
+    --tint-accent: #1a2440;  --edge-accent: #2c3d66;
+    --tint-good: #10251a;    --edge-good: #1e4632;
+    --tint-bad: #2c1618;     --edge-bad: #55282b;
+    --tint-warn: #2b2110;    --edge-warn: #574222;
+
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4);
+  }
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --ink: #e6e8ec;
+  --muted: #969db0;
+  --line: #2b303b;
+  --paper: #171a21;
+  --wash: #0e1014;
+
+  --accent: #7da2ff;
+  --good: #4ade80;
+  --bad: #f87171;
+  --warn: #fbbf24;
+
+  --on-solid: #0e1014;
+
+  --tint-accent: #1a2440;  --edge-accent: #2c3d66;
+  --tint-good: #10251a;    --edge-good: #1e4632;
+  --tint-bad: #2c1618;     --edge-bad: #55282b;
+  --tint-warn: #2b2110;    --edge-warn: #574222;
+
+  --shadow: 0 1px 2px rgba(0, 0, 0, .4);
+}
+
 * { box-sizing: border-box; }
+
+html, body, #root { height: 100%; }
 
 body {
   margin: 0;
   font: 15px/1.55 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   color: var(--ink);
   background: var(--wash);
+  /* The shell owns scrolling; the page itself never scrolls. */
+  overflow: hidden;
 }
 
 button {
@@ -34,12 +119,13 @@ button {
   border: 1px solid var(--line);
   border-radius: 6px;
   background: var(--paper);
+  color: var(--ink);
   cursor: pointer;
 }
 button:hover:not(:disabled) { border-color: var(--muted); }
 button:disabled { opacity: .45; cursor: not-allowed; }
-button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-button.commit { background: var(--good); border-color: var(--good); color: #fff; }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-solid); }
+button.commit { background: var(--good); border-color: var(--good); color: var(--on-solid); }
 
 input, select {
   font: inherit;
@@ -48,11 +134,15 @@ input, select {
   border: 1px solid var(--line);
   border-radius: 6px;
   background: var(--paper);
+  color: var(--ink);
 }
+input::placeholder { color: var(--muted); }
 
 code, .mono, .hash, .offsets { font-family: var(--mono); font-size: 12px; }
 
 /* ------------------------------------------------------------- structure -- */
+
+.app { display: flex; flex-direction: column; height: 100%; }
 
 .top {
   display: flex;
@@ -61,16 +151,39 @@ code, .mono, .hash, .offsets { font-family: var(--mono); font-size: 12px; }
   padding: 12px 20px;
   background: var(--paper);
   border-bottom: 1px solid var(--line);
+  flex: none;
 }
 .top h1 { font-size: 17px; margin: 0; letter-spacing: -.01em; }
 .top .sub { color: var(--muted); font-size: 13px; flex: 1; }
 .health { font-size: 12px; color: var(--muted); }
 .health.healthy { color: var(--good); }
 .health.unreachable, .health.degraded { color: var(--bad); }
+.theme { padding: 4px 9px; font-size: 13px; line-height: 1; align-self: center; }
 
-.columns { display: flex; align-items: flex-start; gap: 20px; padding: 20px; }
-aside { width: 300px; flex: none; }
-main { flex: 1; min-width: 0; }
+/* `min-height: 0` is what actually makes the children scroll: without it a flex
+ * item refuses to shrink below its content, so both columns grow the shell
+ * instead of scrolling inside it. */
+.columns {
+  display: flex;
+  align-items: stretch;
+  gap: 20px;
+  padding: 20px;
+  flex: 1;
+  min-height: 0;
+}
+aside {
+  width: 300px;
+  flex: none;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+main {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  /* Room for the sticky review bar to sit over. */
+  padding-bottom: 4px;
+}
 
 aside section {
   background: var(--paper);
@@ -78,6 +191,7 @@ aside section {
   border-radius: 8px;
   padding: 12px;
   margin-bottom: 14px;
+  box-shadow: var(--shadow);
 }
 aside h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em;
   color: var(--muted); margin: 0 0 8px; }
@@ -111,13 +225,15 @@ aside .row button { width: auto; margin: 0; }
 
 /* ---------------------------------------------------------------- banners */
 
-.banner { padding: 9px 12px; border-radius: 8px; margin-bottom: 12px; font-size: 14px; }
-.banner.busy { background: #eef2ff; color: var(--accent); }
-.banner.error { background: #fef2f2; color: var(--bad); border: 1px solid #fecaca; }
-.banner.notice { background: #f0fdf4; color: var(--good); border: 1px solid #bbf7d0; }
+.banner { padding: 9px 12px; border-radius: 8px; margin-bottom: 12px; font-size: 14px;
+  border: 1px solid transparent; }
+.banner.busy { background: var(--tint-accent); color: var(--accent);
+  border-color: var(--edge-accent); }
+.banner.error { background: var(--tint-bad); color: var(--bad); border-color: var(--edge-bad); }
+.banner.notice { background: var(--tint-good); color: var(--good); border-color: var(--edge-good); }
 
 .empty { background: var(--paper); border: 1px solid var(--line); border-radius: 8px;
-  padding: 28px; text-align: center; color: var(--muted); }
+  padding: 28px; text-align: center; color: var(--muted); box-shadow: var(--shadow); }
 .empty p { margin: 0 0 6px; }
 
 /* ------------------------------------------------------------------- run -- */
@@ -125,7 +241,7 @@ aside .row button { width: auto; margin: 0; }
 .runbar {
   display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
   background: var(--paper); border: 1px solid var(--line); border-radius: 8px;
-  padding: 10px 14px; margin-bottom: 12px; font-size: 13px;
+  padding: 10px 14px; margin-bottom: 12px; font-size: 13px; box-shadow: var(--shadow);
 }
 .runbar .status { font-weight: 600; text-transform: capitalize; }
 .runbar .status.committed { color: var(--good); }
@@ -142,15 +258,22 @@ aside .row button { width: auto; margin: 0; }
 .delta .same { color: var(--good); }
 .delta .same b { color: var(--good); }
 
-.tabs { display: flex; gap: 6px; margin-bottom: 12px; }
+/* Stays put while the proposals scroll under it: the tabs are how a reviewer
+ * moves between the review and the evidence, and hunting for them is friction
+ * in the one flow this screen exists for. */
+.tabs {
+  display: flex; gap: 6px; margin-bottom: 12px;
+  position: sticky; top: 0; z-index: 2;
+  padding: 4px 0; background: var(--wash);
+}
 .tabs button { text-transform: capitalize; }
-.tabs button.on { background: var(--ink); border-color: var(--ink); color: #fff; }
+.tabs button.on { background: var(--ink); border-color: var(--ink); color: var(--wash); }
 
 /* -------------------------------------------------------------- proposals */
 
 .proposal {
   background: var(--paper); border: 1px solid var(--line); border-left-width: 3px;
-  border-radius: 8px; padding: 12px 14px; margin-bottom: 10px;
+  border-radius: 8px; padding: 12px 14px; margin-bottom: 10px; box-shadow: var(--shadow);
 }
 .proposal.conflict { border-left-color: var(--warn); }
 .proposal.finding { border-left-color: var(--bad); }
@@ -160,15 +283,17 @@ aside .row button { width: auto; margin: 0; }
 .proposal header { display: flex; align-items: center; gap: 8px; cursor: pointer; }
 .proposal .kind { font-size: 11px; text-transform: uppercase; letter-spacing: .06em;
   color: var(--muted); }
-.proposal .label { font-weight: 600; font-family: var(--mono); font-size: 13px; }
+.proposal .label { font-weight: 600; font-family: var(--mono); font-size: 13px;
+  overflow-wrap: anywhere; }
 .proposal .chev { margin-left: auto; color: var(--muted); }
 .proposal .summary { font-size: 13px; color: var(--muted); margin-top: 4px; }
 .proposal .body { margin-top: 10px; }
 
 .severity { font-size: 11px; padding: 1px 6px; border-radius: 10px; border: 1px solid; }
-.severity.high, .severity.critical { color: var(--bad); border-color: #fecaca;
-  background: #fef2f2; }
-.severity.medium { color: var(--warn); border-color: #fed7aa; background: #fff7ed; }
+.severity.high, .severity.critical { color: var(--bad); border-color: var(--edge-bad);
+  background: var(--tint-bad); }
+.severity.medium { color: var(--warn); border-color: var(--edge-warn);
+  background: var(--tint-warn); }
 .severity.low { color: var(--muted); border-color: var(--line); background: var(--wash); }
 
 .values { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
@@ -178,9 +303,9 @@ aside .row button { width: auto; margin: 0; }
 /* The quoted source: the most legible thing on the page. */
 .span { border-left: 2px solid var(--line); padding: 4px 0 4px 10px; margin: 8px 0; }
 .span-source { display: flex; align-items: center; gap: 6px; font-size: 12px;
-  color: var(--muted); }
+  color: var(--muted); flex-wrap: wrap; }
 .span-source .doc { font-family: var(--mono); }
-.span blockquote { margin: 4px 0 0; font-size: 14px; }
+.span blockquote { margin: 4px 0 0; font-size: 14px; overflow-wrap: anywhere; }
 .span blockquote::before { content: '“'; }
 .span blockquote::after { content: '”'; }
 .span-value { font-family: var(--mono); font-size: 12px; color: var(--accent); margin-top: 2px; }
@@ -192,13 +317,16 @@ aside .row button { width: auto; margin: 0; }
 .statement { font-size: 14px; }
 .detail { font-size: 13px; color: var(--muted); margin-top: 2px; }
 
+/* Long section bodies get their own scroller rather than stretching the page:
+ * wide content must never make the shell scroll sideways. */
 .section-body { background: var(--wash); border: 1px solid var(--line); border-radius: 6px;
   padding: 10px; font-family: var(--mono); font-size: 12px; line-height: 1.5;
-  white-space: pre-wrap; overflow-x: auto; margin: 6px 0 0; }
+  white-space: pre-wrap; overflow-wrap: anywhere; overflow-x: auto;
+  max-height: 460px; overflow-y: auto; margin: 6px 0 0; }
 
 .verdict { display: flex; gap: 6px; margin-top: 10px; }
-.verdict .approve.on { background: var(--good); border-color: var(--good); color: #fff; }
-.verdict .reject.on { background: var(--bad); border-color: var(--bad); color: #fff; }
+.verdict .approve.on { background: var(--good); border-color: var(--good); color: var(--on-solid); }
+.verdict .reject.on { background: var(--bad); border-color: var(--bad); color: var(--on-solid); }
 
 .decided { margin-top: 10px; font-size: 13px; }
 .decided.approved { color: var(--good); }
@@ -206,9 +334,11 @@ aside .row button { width: auto; margin: 0; }
 .decided .reason { color: var(--muted); font-style: italic; }
 
 .review-bar {
-  position: sticky; bottom: 0; display: flex; align-items: center; gap: 10px;
+  position: sticky; bottom: 0; z-index: 2;
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
   background: var(--paper); border: 1px solid var(--line); border-radius: 8px;
   padding: 10px 14px; margin-top: 14px;
+  box-shadow: 0 -2px 10px rgba(0, 0, 0, .06);
 }
 .review-bar .counts { flex: 1; font-size: 13px; color: var(--muted); }
 .review-bar .warn { color: var(--warn); }
@@ -219,11 +349,12 @@ aside .row button { width: auto; margin: 0; }
 .findings .note { font-size: 13px; color: var(--muted); background: var(--paper);
   border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; }
 .finding { background: var(--paper); border: 1px solid var(--line);
-  border-left-width: 3px; border-radius: 8px; padding: 12px 14px; margin-bottom: 8px; }
+  border-left-width: 3px; border-radius: 8px; padding: 12px 14px; margin-bottom: 8px;
+  box-shadow: var(--shadow); }
 .finding.violated { border-left-color: var(--bad); }
 .finding.not_enough_evidence { border-left-color: var(--warn); }
 .finding.satisfied { border-left-color: var(--good); }
-.finding-head { display: flex; align-items: center; gap: 8px; }
+.finding-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .finding .rule { font-family: var(--mono); font-size: 13px; flex: 1; }
 .outcome { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
 .outcome.violated { color: var(--bad); }
@@ -231,24 +362,34 @@ aside .row button { width: auto; margin: 0; }
 .outcome.satisfied { color: var(--good); }
 
 .section { background: var(--paper); border: 1px solid var(--line); border-radius: 8px;
-  padding: 12px 14px; margin-bottom: 10px; }
-.section-head { display: flex; gap: 10px; align-items: baseline; }
+  padding: 12px 14px; margin-bottom: 10px; box-shadow: var(--shadow); }
+.section-head { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
 .section-head .key { font-weight: 600; font-family: var(--mono); font-size: 13px; }
 .section-head .hash { color: var(--muted); }
 
+/* Tables scroll inside their own box. A wide cost table must not be able to
+ * push the whole shell sideways. */
+.stages, .audit-wrap { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; background: var(--paper);
   border: 1px solid var(--line); border-radius: 8px; font-size: 13px; }
-th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); }
+th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line);
+  white-space: nowrap; }
 th { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
 td.num, th.num { text-align: right; font-family: var(--mono); }
 tfoot td { font-weight: 600; }
-.stages { overflow-x: auto; }
 .stages .stage { font-family: var(--mono); }
 .path { font-size: 11px; padding: 1px 6px; margin-right: 4px; border-radius: 10px;
   background: var(--wash); border: 1px solid var(--line); color: var(--muted); }
 .audit .when { color: var(--muted); font-size: 12px; }
 
 @media (max-width: 900px) {
-  .columns { flex-direction: column; }
-  aside { width: 100%; }
+  /* One column, one scroller: two independent scrollers side by side is a
+   * desktop affordance, and on a narrow screen it is just two small windows. */
+  body { overflow: auto; }
+  html, body, #root { height: auto; }
+  .app { height: auto; }
+  .columns { flex-direction: column; min-height: 0; }
+  aside { width: 100%; overflow: visible; }
+  main { overflow: visible; }
+  .tabs { position: static; }
 }

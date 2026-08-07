@@ -30,6 +30,30 @@ import { Audit, Findings, Proposal, Register, Stages } from './components'
 
 const TABS = ['review', 'findings', 'register', 'audit', 'cost']
 
+/** Light, dark, or whatever the operating system says.
+ *
+ * Three states rather than two: "system" is the default and is not the same as
+ * either fixed choice, because a reviewer who has their machine set to switch
+ * at dusk should not have this one page stay bright. The choice is stamped on
+ * the root element, which is what the `:root[data-theme=...]` rules in
+ * styles.css key off; `system` removes the attribute and lets the media query
+ * decide.
+ */
+const THEMES = ['system', 'light', 'dark']
+const THEME_ICON = { system: '◐', light: '☀', dark: '☾' }
+
+function applyTheme(theme) {
+  const root = document.documentElement
+  if (theme === 'system') root.removeAttribute('data-theme')
+  else root.setAttribute('data-theme', theme)
+  try { localStorage.setItem('doctask-theme', theme) } catch { /* private mode */ }
+}
+
+function storedTheme() {
+  try { return THEMES.includes(localStorage.getItem('doctask-theme'))
+    ? localStorage.getItem('doctask-theme') : 'system' } catch { return 'system' }
+}
+
 export default function App() {
   const [health, setHealth] = useState(null)
   const [piles, setPiles] = useState([])
@@ -52,6 +76,7 @@ export default function App() {
   const [report, setReport] = useState(null)
 
   const [tab, setTab] = useState('review')
+  const [theme, setTheme] = useState(storedTheme)
   const [busy, setBusy] = useState(null)
   const [error, setError] = useState(null)
   const [notice, setNotice] = useState(null)
@@ -111,6 +136,8 @@ export default function App() {
     setTab('review')
     await loadRun(row.id)
   }, [loadRun])
+
+  useEffect(() => { applyTheme(theme) }, [theme])
 
   useEffect(() => {
     api.health().then(setHealth).catch(() => setHealth({ status: 'unreachable' }))
@@ -231,6 +258,16 @@ export default function App() {
         <span className={`health ${health?.status ?? ''}`}>
           {health ? `${health.status} · db ${health.database ?? 'unknown'}` : '…'}
         </span>
+        <button
+          className="theme"
+          title={`Theme: ${theme}. Click to cycle system → light → dark.`}
+          // Functional, for the same reason the verdicts are: two clicks before
+          // a re-render would both advance from the same starting theme.
+          onClick={() => setTheme((prev) =>
+            THEMES[(THEMES.indexOf(prev) + 1) % THEMES.length])}
+        >
+          {THEME_ICON[theme]}
+        </button>
       </header>
 
       <div className="columns">
