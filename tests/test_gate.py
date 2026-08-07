@@ -89,17 +89,19 @@ def test_conflicts_are_recorded_open(conn, pile, run):
 def test_rejecting_one_item_does_not_discard_the_rest(conn, pile, run, cfg):
     """The property the brief calls out by name."""
     conflicts = [p for p in run.gate.proposals if p["kind"] == "conflict"]
-    sections = [p for p in run.gate.proposals if p["kind"] == "section_patch"]
+    others = [p for p in run.gate.proposals if p["kind"] != "conflict"]
 
     decisions = [Decision(str(conflicts[0]["id"]), False, "rate change is historical")]
     decisions += [Decision(str(p["id"]), True) for p in conflicts[1:]]
-    decisions += [Decision(str(p["id"]), True) for p in sections]
+    decisions += [Decision(str(p["id"]), True) for p in others]
 
     counts = gate_module.decide(conn, run.run_id, decisions, decided_by="vinayak")
-    assert counts == {"approved": 8, "rejected": 1, "ignored": 0}
+    assert counts == {"approved": len(run.gate.proposals) - 1, "rejected": 1,
+                      "ignored": 0}
 
     result = gate_module.commit(conn, pile, run.run_id, run.register)
-    assert result["approved"] == 8 and result["rejected"] == 1
+    assert result["approved"] == len(run.gate.proposals) - 1
+    assert result["rejected"] == 1
     assert result["sections_written"] == 6
 
     statuses = {r["status"] for r in

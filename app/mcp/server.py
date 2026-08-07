@@ -22,6 +22,7 @@ do, because neither of them knows.
     doctask_commit              write exactly what was approved
     doctask_resume              continue a run that stopped
     doctask_get_register        the committed deliverable
+    doctask_get_findings        what the playbook said, rule by rule
     doctask_get_audit           what changed, when, because of which source
 
 ## The gate, and who is on the other side of it
@@ -245,6 +246,20 @@ def doctask_get_register(pile_id: str, version: int | None = None) -> str:
     register to read, and that is the correct answer rather than a missing one.
     """
     return _result(lambda: ops.register(pile_id, version))
+
+
+@server.tool()
+def doctask_get_findings(pile_id: str, outcome: str | None = None) -> str:
+    """What the playbook said about this pile, rule by rule.
+
+    Every rule's current answer, not only the broken ones. Three outcomes:
+    `violated`, `satisfied`, and `not_enough_evidence` -- and the third is not
+    the second. A rule the pile could not answer is not a rule the pile passed,
+    and reporting a contract as clean when nobody could check it is the failure
+    this stage is shaped to avoid. Each finding carries the spans that
+    establish it.
+    """
+    return _result(lambda: ops.findings(pile_id, outcome))
 
 
 @server.tool()

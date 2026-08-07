@@ -2,9 +2,10 @@
 
 Graded behaviour 9. The failure it prevents is not mainly a crash -- it is a
 reviewer being handed the same decision twice. Removing the lock and running
-two real processes at one pile produces fifteen proposals where there are nine,
-with nothing erroring and no sign in the output that anything went wrong. The
-loud failures are easier to find and less dangerous than that one.
+two real processes at one pile produces far more proposals than there are
+decisions to make, with nothing erroring and no sign in the output that anything
+went wrong. The loud failures are easier to find and less dangerous than that
+one.
 
 What this must never do:
 
@@ -122,7 +123,7 @@ def test_the_pile_is_not_doubled(conn, contended):
     assert fetch_one(conn, "SELECT count(*) AS n FROM document WHERE pile_id = %s",
                      (pile,))["n"] == 7
     assert fetch_one(conn, "SELECT count(*) AS n FROM proposal WHERE pile_id = %s",
-                     (pile,))["n"] == 9
+                     (pile,))["n"] == 13
 
 
 def test_a_run_on_another_pile_is_not_blocked(conn, make_pile, contended):

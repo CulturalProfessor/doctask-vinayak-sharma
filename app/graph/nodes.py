@@ -41,6 +41,7 @@ from app.stages.classify import classify_document
 from app.stages.compose import Register, compose
 from app.stages.entities import resolve_entity
 from app.stages.extract import Gap, extract_document
+from app.stages.examine import Finding, examine
 from app.stages.reconcile import Conflict, ReconcileResult, reconcile
 from app.store import repository as repo
 
@@ -280,6 +281,37 @@ class Nodes:
         )
         return {"register": register_to_state(register)}
 
+    def examine(self, state: RunState) -> RunState:
+        """The second movement: check the pile against the playbook.
+
+        Runs after `compose` so that a rule which needs to look at the
+        deliverable can, and so the register is never shaped by whether a rule
+        passed. Findings are their own output, not a section -- the register is
+        what the documents say, and a finding is a judgement about it.
+
+        No model is called here. See `app/stages/examine.py`: these are
+        arithmetic, and a finding a reviewer has to trust is worth more than one
+        a reviewer has to check.
+        """
+        pile_id, run_id = state["pile_id"], state["run_id"]
+        facts = repo.load_sourced_facts(self.conn, self.cfg, pile_id)
+        documents = repo.documents_for_pile(self.conn, pile_id)
+
+        with _Timer() as timer:
+            result = examine(self.cfg, facts, documents)
+        repo.persist_findings(self.conn, pile_id, run_id, result.findings)
+
+        repo.record_stage_event(
+            self.conn, run_id, "examine", result.path, ms=timer.ms,
+            detail={"rules": len(result.findings),
+                    "violated": len(result.violations),
+                    "satisfied": len(result.satisfied),
+                    "not_enough_evidence": len(result.unjudged),
+                    "summary": result.summary()},
+        )
+        return {"findings": [_finding_row(f) for f in result.findings],
+                "examine_summary": result.summary()}
+
     def delta(self, state: RunState) -> RunState:
         """What this run actually changed, against the committed version.
 
@@ -337,6 +369,26 @@ class Nodes:
                 ref_id=conflict_ids.get(conflict.key),
                 summary=self._conflict_summary(conflict),
                 payload=self._conflict_payload(conflict),
+            )
+
+        # Findings the playbook says are broken. Only violations are decisions;
+        # a rule that passed and a rule nobody could judge are things to read in
+        # the report, and putting them in front of a reviewer as items to
+        # approve would bury the four that matter under the four that do not.
+        seen_findings = repo.finding_proposal_details(self.conn, pile_id)
+        finding_ids = repo.finding_ids(self.conn, pile_id)
+        for row in state.get("findings", []):
+            if row["outcome"] != "violated":
+                continue
+            key = f"{row['rule_key']}|{row['entity_key']}"
+            if any(prior["status"] == "pending" or prior["detail"] == row["detail"]
+                   for prior in seen_findings.get(key, [])):
+                continue
+            repo.create_proposal(
+                self.conn, pile_id, run_id, kind="finding",
+                ref_id=finding_ids.get((row["rule_key"], row["entity_key"])),
+                summary=f"{row['rule_key']} ({row['severity']}): {row['detail']}",
+                payload=row,
             )
 
         delta = state["delta"]
@@ -508,6 +560,25 @@ class Nodes:
                 for m in conflict.members
             ],
         }
+
+
+def _finding_row(finding: Finding) -> dict[str, Any]:
+    """A finding as plain JSON, so it can live in the checkpoint and be the
+    proposal payload without being reshaped twice."""
+    return {
+        "rule_key": finding.rule_key,
+        "entity_key": finding.entity_key,
+        "severity": finding.severity,
+        "outcome": finding.outcome,
+        "statement": " ".join(finding.statement.split()),
+        "detail": finding.detail,
+        "citations": [
+            {"document": c.document, "doc_type": c.doc_type, "value": c.display,
+             "quote": c.fact.span.text, "char_start": c.fact.span.char_start,
+             "char_end": c.fact.span.char_end}
+            for c in finding.citations
+        ],
+    }
 
 
 __all__ = ["Nodes", "Register"]

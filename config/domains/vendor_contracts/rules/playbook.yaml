@@ -1,7 +1,20 @@
-# The contract playbook. This is the "rules the user cares about" that the
-# examine stage checks the sources and the register against.
+# The contract playbook: the rules the user cares about, which the EXAMINE
+# stage checks the pile against.
 #
-# Adding a rule is adding a block here. That is the whole mechanism.
+# Adding a rule is adding a block here. Each one says what it means in prose --
+# which is what a reviewer reads on the finding -- and how it is actually
+# decided, which is a `check` naming one of the kinds in app/stages/examine.py
+# and the fields it works on.
+#
+# Where configuration-over-code stops, stated plainly: a rule shaped like one
+# that already exists is a YAML change and nothing else. A rule needing a new
+# kind of arithmetic is a new check kind, and that is Python. The six kinds
+# below cover these eight rules.
+#
+# `applies_to` is documentation of which document types a rule concerns. The
+# check itself works on the engagement's facts, because a rule about "the
+# governing agreement" is about whichever document currently governs, and that
+# is settled by precedence rather than by naming a type here.
 
 rules:
   rate_matches_current_agreement:
@@ -10,6 +23,18 @@ rules:
       accounting for any amendment effective before that period began.
     severity: high
     applies_to: [invoice, amendment, msa]
+    # Deliberately asymmetric. An amendment changing the rate is the contract
+    # working; an invoice disagreeing with the amendment is the error. Equal
+    # authority disagreeing is a conflict for the gate, not a rule violation,
+    # and the check refuses to decide it.
+    check:
+      kind: matches_governing
+      field: hourly_rate
+      # Only invoices are bound. An MSA still stating the pre-amendment rate is
+      # not in breach of the amendment that amended it -- that is what an
+      # amendment is, and reporting it would be a finding no lawyer would read
+      # twice.
+      must_match: [invoice]
 
   hours_within_sow_cap:
     statement: >
@@ -17,6 +42,10 @@ rules:
       hours cap that statement of work authorises.
     severity: high
     applies_to: [invoice, sow]
+    check:
+      kind: sum_within_limit
+      sum_of: hours_billed
+      limit: hours_cap
 
   payment_terms_consistent:
     statement: >
@@ -24,6 +53,10 @@ rules:
       governing agreement as amended.
     severity: medium
     applies_to: [invoice, msa, amendment]
+    check:
+      kind: matches_governing
+      field: payment_terms_days
+      must_match: [invoice]
 
   termination_notice_observed:
     statement: >
@@ -31,18 +64,34 @@ rules:
       period the governing agreement requires.
     severity: high
     applies_to: [notice, msa, amendment]
+    check:
+      kind: at_least
+      field: notice_period_days
+      minimum: termination_notice_days
 
   liability_cap_present:
     statement: >
       The governing agreement must state a cap on aggregate liability.
     severity: medium
     applies_to: [msa, amendment]
+    check:
+      kind: field_present
+      field: liability_cap
 
   amendment_references_parent:
     statement: >
       Every amendment must identify the agreement it amends.
     severity: low
     applies_to: [amendment]
+    # Kept deliberately, and it will report that it cannot be judged: no
+    # extraction schema asks for this field, so nothing in the pile could answer
+    # it however the contracts are written. That is a gap in the configuration,
+    # not a fault in the documents, and reporting it as a violation would blame
+    # the sources for our own omission. Adding `amends_agreement` to
+    # extraction/amendment.yaml is what makes this rule live.
+    check:
+      kind: field_present
+      field: amends_agreement
 
   invoice_within_term:
     statement: >
@@ -50,6 +99,15 @@ rules:
       including any extension.
     severity: medium
     applies_to: [invoice, msa, amendment]
+    # Checked on the invoice date rather than the service period: the period is
+    # extracted as free text ("1-31 July 2026") and the date is a date. Using
+    # the value we can actually compare beats parsing prose into a range and
+    # being confidently wrong about the boundary.
+    check:
+      kind: date_within
+      value: invoice_date
+      start: effective_date
+      plus_months: term_months
 
   no_instructions_in_sources:
     statement: >
@@ -57,3 +115,8 @@ rules:
       take an action. Such text is reported, never followed.
     severity: high
     applies_to: [msa, amendment, sow, invoice, notice]
+    # This is where behaviour 8 stops being a branch in the pipeline and becomes
+    # something a reviewer reads. Quarantine already kept the document out of
+    # every input; this states it, and quotes the text back.
+    check:
+      kind: no_quarantined_sources

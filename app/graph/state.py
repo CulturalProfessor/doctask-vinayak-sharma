@@ -56,6 +56,8 @@ class RunState(TypedDict, total=False):
     conflict_count: int
     reconcile_path: str
     register: dict[str, Any] | None     # {title, sections: [...]}
+    findings: list[dict[str, Any]]      # one per rule per engagement
+    examine_summary: str
     delta: dict[str, list[str]]         # {changed, unchanged, added}
 
     # -- the gate ---------------------------------------------------------
@@ -73,6 +75,7 @@ def new_state(run_id: str, pile_id: str, domain: str, kind: str,
         documents={}, duplicates=[], doc_types={}, entity_keys={},
         fact_counts={}, gaps=[], quarantined=[], escalated=[],
         conflict_count=0, reconcile_path="", register=None,
+        findings=[], examine_summary="",
         delta={"changed": [], "unchanged": [], "added": []},
         proposal_count=0, status="running", note=None, committed=None,
     )

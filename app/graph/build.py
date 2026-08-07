@@ -13,7 +13,7 @@ and not the other.
                                └─(queue empty)→ reconcile ─┬─(too many)→ escalate_volume ─┐
                                                            └─────────────────→ compose ←──┘
                                                                                   ↓
-                                                    commit ←── gate ←── propose ←── delta
+                                          commit ←── gate ←── propose ←── delta ←── examine
                                                                 ↑
                                                           interrupt(): halts here.
 
@@ -43,6 +43,7 @@ def build_graph(nodes: Nodes, checkpointer):
     graph.add_node("reconcile", nodes.reconcile)
     graph.add_node("escalate_volume", nodes.escalate_volume)
     graph.add_node("compose", nodes.compose)
+    graph.add_node("examine", nodes.examine)
     graph.add_node("delta", nodes.delta)
     graph.add_node("propose", nodes.propose)
     graph.add_node("gate", nodes.gate)
@@ -62,7 +63,8 @@ def build_graph(nodes: Nodes, checkpointer):
                                 {"escalate_volume": "escalate_volume",
                                  "compose": "compose"})
     graph.add_edge("escalate_volume", "compose")
-    graph.add_edge("compose", "delta")
+    graph.add_edge("compose", "examine")
+    graph.add_edge("examine", "delta")
     graph.add_edge("delta", "propose")
     graph.add_conditional_edges("propose", nodes.after_propose,
                                 {"gate": "gate", "done": END})

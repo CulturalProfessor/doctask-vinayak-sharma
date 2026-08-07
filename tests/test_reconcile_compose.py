@@ -211,7 +211,7 @@ def test_the_run_reports_what_it_cost_by_stage(report):
     """Behaviour 10, falling out of the same record that makes stages watchable."""
     costs = report.cost_by_stage()
     assert set(costs) == {"ingest", "classify", "extract", "resolve_entity",
-                          "reconcile", "compose", "delta", "gate"}
+                          "reconcile", "compose", "examine", "delta", "gate"}
     assert costs["classify"]["calls"] == 7
     assert costs["extract"]["tokens_in"] > 0
     # Only the two stages that talk to a model may report a cost. If a stage

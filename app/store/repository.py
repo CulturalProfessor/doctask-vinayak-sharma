@@ -208,6 +208,133 @@ def persist_conflicts(conn: psycopg.Connection, pile_id: str,
     return out
 
 
+# -------------------------------------------------------------- findings --
+
+def persist_findings(conn: psycopg.Connection, pile_id: str, run_id: str,
+                     findings: Iterable[Any]) -> dict[tuple[str, str], str]:
+    """Record what the playbook said, including where it said nothing.
+
+    Citations are written as `finding_citation` rows pointing at the spans that
+    establish the finding. The lookup from a fact back to its span is by
+    (document, offsets), which is what a citation actually is -- the same fact
+    re-extracted by a later run gets a new row id, and matching on that would
+    lose every citation on the first re-examination.
+    """
+    out: dict[tuple[str, str], str] = {}
+    for finding in findings:
+        row = fetch_one(conn, """
+            INSERT INTO finding (pile_id, run_id, rule_key, entity_key, severity,
+                                 outcome, statement, detail)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (pile_id, rule_key, entity_key) DO UPDATE SET
+                run_id = EXCLUDED.run_id, severity = EXCLUDED.severity,
+                outcome = EXCLUDED.outcome, statement = EXCLUDED.statement,
+                detail = EXCLUDED.detail, detected_at = now(),
+                -- A finding whose text changed is a new question, so a decision
+                -- taken on the old wording does not carry over to it.
+                status = CASE WHEN finding.detail IS DISTINCT FROM EXCLUDED.detail
+                              THEN 'open' ELSE finding.status END
+            RETURNING id
+        """, (pile_id, run_id, finding.rule_key, finding.entity_key,
+              finding.severity, finding.outcome, finding.statement.strip(),
+              finding.detail))
+        finding_id = str(row["id"])
+        out[(finding.rule_key, finding.entity_key)] = finding_id
+
+        execute(conn, "DELETE FROM finding_citation WHERE finding_id = %s",
+                (finding_id,))
+        for cited in finding.citations:
+            span = fetch_one(conn, """
+                SELECT s.id FROM span s JOIN document d ON d.id = s.document_id
+                WHERE d.pile_id = %s AND d.filename = %s
+                  AND s.char_start = %s AND s.char_end = %s
+                LIMIT 1
+            """, (pile_id, cited.document, cited.fact.span.char_start,
+                  cited.fact.span.char_end))
+            if span:
+                execute(conn, """
+                    INSERT INTO finding_citation (finding_id, span_id)
+                    VALUES (%s, %s) ON CONFLICT DO NOTHING
+                """, (finding_id, span["id"]))
+    return out
+
+
+def findings_for_pile(conn: psycopg.Connection, pile_id: str,
+                      outcome: str | None = None) -> list[dict[str, Any]]:
+    """Every rule's current answer, with the spans that support it."""
+    sql = """
+        SELECT f.id, f.rule_key, f.entity_key, f.severity, f.outcome, f.status,
+               f.statement, f.detail, f.detected_at,
+               coalesce(json_agg(json_build_object(
+                   'document', d.filename, 'quote', s.text,
+                   'char_start', s.char_start, 'char_end', s.char_end
+               ) ORDER BY d.filename, s.char_start)
+               FILTER (WHERE s.id IS NOT NULL), '[]') AS citations
+        FROM finding f
+        LEFT JOIN finding_citation fc ON fc.finding_id = f.id
+        LEFT JOIN span s     ON s.id = fc.span_id
+        LEFT JOIN document d ON d.id = s.document_id
+        WHERE f.pile_id = %s
+    """
+    params: tuple = (pile_id,)
+    if outcome:
+        sql += " AND f.outcome = %s"
+        params = (pile_id, outcome)
+    return fetch_all(conn, sql + """
+        GROUP BY f.id ORDER BY f.outcome, f.severity DESC, f.rule_key
+    """, params)
+
+
+def finding_proposal_details(conn: psycopg.Connection,
+                             pile_id: str) -> dict[str, list[dict[str, Any]]]:
+    """Which findings have already been put to a person, and what they said.
+
+    Same shape and same reason as `conflict_proposal_history`: a run must not
+    ask again about a finding still on someone's desk, nor re-open one that was
+    decided and has not changed since.
+    """
+    out: dict[str, list[dict[str, Any]]] = {}
+    for row in fetch_all(conn, """
+        SELECT payload ->> 'rule_key' AS rule_key,
+               payload ->> 'entity_key' AS entity_key,
+               payload ->> 'detail'   AS detail,
+               status
+        FROM proposal WHERE pile_id = %s AND kind = 'finding'
+    """, (pile_id,)):
+        key = f"{row['rule_key']}|{row['entity_key']}"
+        out.setdefault(key, []).append(
+            {"status": row["status"], "detail": row["detail"]}
+        )
+    return out
+
+
+def finding_ids(conn: psycopg.Connection,
+                pile_id: str) -> dict[tuple[str, str], str]:
+    return {(row["rule_key"], row["entity_key"]): str(row["id"])
+            for row in fetch_all(conn, """
+                SELECT id, rule_key, entity_key FROM finding WHERE pile_id = %s
+            """, (pile_id,))}
+
+
+def documents_for_pile(conn: psycopg.Connection,
+                       pile_id: str) -> list[dict[str, Any]]:
+    """Every document in the pile, including the ones that never became input.
+
+    A quarantined document has no facts by design, so a stage that only looks at
+    facts cannot see it -- and the rule that reports quarantine needs to.
+    """
+    return fetch_all(conn, """
+        SELECT id, filename, format, doc_type, status, ingest_note
+        FROM document WHERE pile_id = %s ORDER BY filename
+    """, (pile_id,))
+
+
+def set_finding_status(conn: psycopg.Connection, finding_id: str,
+                       status: str) -> None:
+    execute(conn, "UPDATE finding SET status = %s WHERE id = %s",
+            (status, finding_id))
+
+
 # ------------------------------------------------------------- proposals --
 
 def known_entity_keys(conn: psycopg.Connection, pile_id: str) -> list[str]:
@@ -383,6 +510,11 @@ def commit_approved(conn: psycopg.Connection, pile_id: str, run_id: str,
         elif proposal["kind"] == "conflict" and proposal["ref_id"]:
             execute(conn, "UPDATE conflict SET status = 'approved' WHERE id = %s",
                     (proposal["ref_id"],))
+        elif proposal["kind"] == "finding" and proposal["ref_id"]:
+            # Accepted means the reviewer agrees the rule is broken. The finding
+            # stands as something to act on, not as something resolved by having
+            # been read.
+            set_finding_status(conn, proposal["ref_id"], "accepted")
 
     # Carry forward every section this run did not touch, at its existing hash.
     #
@@ -412,6 +544,11 @@ def commit_approved(conn: psycopg.Connection, pile_id: str, run_id: str,
             # honest state.
             execute(conn, "UPDATE conflict SET status = 'rejected' WHERE id = %s",
                     (proposal["ref_id"],))
+        elif proposal["kind"] == "finding" and proposal["ref_id"]:
+            # Dismissed means a person looked and judged it not a problem. The
+            # finding stays on the record saying so, because deleting it would
+            # let the next run raise it again as though it were new.
+            set_finding_status(conn, proposal["ref_id"], "dismissed")
 
     set_run_status(conn, run_id, "committed")
     return {

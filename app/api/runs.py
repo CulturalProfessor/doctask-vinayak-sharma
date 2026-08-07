@@ -136,6 +136,12 @@ def register(pile_id: str, version: int | None = None) -> dict:
     return _translate(lambda: ops.register(pile_id, version))
 
 
+@router.get("/piles/{pile_id}/findings")
+def findings(pile_id: str, outcome: str | None = None) -> dict:
+    """What the playbook found, and what it could not judge."""
+    return _translate(lambda: ops.findings(pile_id, outcome))
+
+
 @router.get("/piles/{pile_id}/audit")
 def audit(pile_id: str) -> dict:
     """What changed, when, and because of which source."""

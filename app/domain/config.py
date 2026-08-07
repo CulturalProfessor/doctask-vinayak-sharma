@@ -38,6 +38,10 @@ class RuleSpec:
     statement: str
     severity: str
     applies_to: list[str] = field(default_factory=list)
+    # How the rule is actually evaluated: a check kind from
+    # app/stages/examine.py plus the fields it names. A rule without one is
+    # reported as unjudgeable rather than quietly skipped.
+    check: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -104,6 +108,7 @@ def load_domain(name: str, root: Path | None = None) -> DomainConfig:
             statement=r["statement"],
             severity=r.get("severity", "medium"),
             applies_to=list(r.get("applies_to", [])),
+            check=dict(r.get("check") or {}),
         )
         for key, r in raw_rules.items()
     }
@@ -135,6 +140,23 @@ def _validate(cfg: DomainConfig) -> None:
         unknown = [t for t in rule.applies_to if t not in cfg.doc_types]
         if unknown:
             raise ConfigError(f"rule {rule.key!r} applies_to unknown doc types: {unknown}")
+        # A check kind that does not exist would make a rule silently stop being
+        # enforced, and a playbook whose rules quietly do nothing is worse than
+        # no playbook. Caught at load, not three stages into a run.
+        from app.stages.examine import KNOWN_CHECKS
+
+        kind = rule.check.get("kind")
+        if kind is not None and kind not in KNOWN_CHECKS:
+            raise ConfigError(
+                f"rule {rule.key!r} uses unknown check kind {kind!r}; known "
+                f"kinds are {', '.join(sorted(KNOWN_CHECKS))}"
+            )
+        missing = [p for p in KNOWN_CHECKS.get(kind, ()) if p not in rule.check]
+        if missing:
+            raise ConfigError(
+                f"rule {rule.key!r} check {kind!r} needs {missing} but the "
+                f"playbook does not give them"
+            )
     for column in cfg.register.get("columns", []):
         if "field" not in column:
             raise ConfigError(f"register column {column!r} has no 'field'")

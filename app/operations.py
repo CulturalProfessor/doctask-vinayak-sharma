@@ -50,7 +50,7 @@ __all__ = [
     "NotFound", "Invalid", "PileBusy",
     "list_piles", "create_pile", "list_documents",
     "start_run", "arrival", "get_run", "list_proposals", "decide", "commit",
-    "resume", "run_report", "register", "audit",
+    "resume", "run_report", "register", "audit", "findings",
 ]
 
 
@@ -206,6 +206,23 @@ def register(pile_id: str, version: int | None = None) -> dict[str, Any]:
     if not sections:
         raise NotFound("no committed register for this pile")
     return {"pile_id": pile_id, "sections": sections}
+
+
+def findings(pile_id: str, outcome: str | None = None) -> dict[str, Any]:
+    """What the playbook said about this pile, including where it said nothing.
+
+    Returns every rule's current answer, not only the broken ones. "Eight rules
+    were checked and six held" is a different claim from "two problems were
+    found", and only the first is worth trusting -- so the satisfied and the
+    unjudgeable are part of the answer rather than filtered out of it.
+    """
+    _require_pile(pile_id)
+    with transaction() as conn:
+        rows = repo.findings_for_pile(conn, pile_id, outcome)
+    counts: dict[str, int] = {}
+    for row in rows:
+        counts[row["outcome"]] = counts.get(row["outcome"], 0) + 1
+    return {"pile_id": pile_id, "counts": counts, "findings": rows}
 
 
 def audit(pile_id: str) -> dict[str, Any]:

@@ -56,7 +56,7 @@ def test_a_machine_drives_a_pile_from_nothing_to_a_committed_register(conn, revi
 
     assert run["status"] == "awaiting_approval"
     assert run["documents"] == 7 and run["facts"] == 48
-    assert run["conflicts"] == 3 and run["pending_proposals"] == 9
+    assert run["conflicts"] == 3 and run["pending_proposals"] == 13
 
     # Nothing exists yet, and the machine interface says so rather than
     # returning an empty register that reads like a real one.
@@ -64,7 +64,8 @@ def test_a_machine_drives_a_pile_from_nothing_to_a_committed_register(conn, revi
 
     proposals = call("doctask_list_proposals", run_id=run_id,
                      status="pending")["proposals"]
-    assert len(proposals) == 9
+    assert len(proposals) == 13
+    assert {p["kind"] for p in proposals} == {"section_patch", "conflict", "finding"}
 
     # One rejection among eight approvals, in a single review.
     decisions = []
@@ -77,7 +78,7 @@ def test_a_machine_drives_a_pile_from_nothing_to_a_committed_register(conn, revi
         })
     outcome = call("doctask_decide", run_id=run_id, decisions=decisions,
                    decided_by="vinayak")
-    assert outcome == {"run_id": run_id, "approved": 8, "rejected": 1,
+    assert outcome == {"run_id": run_id, "approved": 12, "rejected": 1,
                        "ignored": 0, "pending": 0}
 
     committed = call("doctask_commit", run_id=run_id)
@@ -196,6 +197,7 @@ def test_every_operation_is_reachable_from_the_machine_interface():
         "decide": "doctask_decide",
         "commit": "doctask_commit",
         "register": "doctask_get_register",
+        "findings": "doctask_get_findings",
         "audit": "doctask_get_audit",
     }
     operations = {name for name in ops.__all__ if not name[0].isupper()}
