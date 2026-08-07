@@ -212,9 +212,19 @@ def test_the_server_speaks_the_protocol_over_stdio():
     """The tests above call the server's dispatch in-process, which does not
     prove a client can reach it. This starts the documented entry point and
     completes a real handshake, because "the tools are registered" and "an agent
-    can use them" are different claims."""
+    can use them" are different claims.
+
+    Stdin is held open until the replies arrive, and that is the whole reason
+    this reads the way it does. It used to write the three messages with
+    `subprocess.run(input=...)`, which closes stdin immediately afterwards --
+    so the test was a race between the server processing `tools/list` and the
+    server noticing EOF and shutting down. It won that race on an idle machine
+    and lost it under a full suite, and the earlier fix (a longer timeout)
+    treated a race as slowness. A real client keeps its pipe open; so does this.
+    """
     import subprocess
     import sys
+    import threading
 
     from tests.conftest import REPO_ROOT
 
@@ -226,14 +236,34 @@ def test_the_server_speaks_the_protocol_over_stdio():
         {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}},
     ]) + "\n"
 
-    process = subprocess.run(
-        [sys.executable, "-m", "app.mcp.server"], input=handshake,
-        # Generous: this competes with the rest of the suite for the machine,
-        # and a timeout here would be a fact about load rather than about the
-        # server.
-        cwd=REPO_ROOT, capture_output=True, text=True, timeout=180,
+    process = subprocess.Popen(
+        [sys.executable, "-m", "app.mcp.server"],
+        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        cwd=REPO_ROOT, text=True, bufsize=1,
     )
-    replies = [json.loads(line) for line in process.stdout.splitlines() if line.strip()]
+    # A server that answers neither message and never exits would otherwise hang
+    # the suite forever, so the deadline is enforced by killing it -- which ends
+    # the read below with EOF rather than with a wait that never returns.
+    watchdog = threading.Timer(180, process.kill)
+    watchdog.start()
+    replies: list[dict] = []
+    try:
+        process.stdin.write(handshake)
+        process.stdin.flush()
+        for line in process.stdout:
+            if line.strip():
+                replies.append(json.loads(line))
+            if any(reply.get("id") == 2 for reply in replies):
+                break
+    finally:
+        watchdog.cancel()
+        process.stdin.close()
+        process.kill()
+        process.wait(timeout=30)
+
+    assert any(r.get("id") == 2 for r in replies), (
+        f"the server never answered tools/list; it said: {replies}"
+    )
     initialise = next(r for r in replies if r.get("id") == 1)
     listing = next(r for r in replies if r.get("id") == 2)
 
