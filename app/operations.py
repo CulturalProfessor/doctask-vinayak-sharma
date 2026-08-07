@@ -49,22 +49,35 @@ class Invalid(ValueError):
 __all__ = [
     "NotFound", "Invalid", "PileBusy",
     "list_piles", "create_pile", "list_documents",
-    "start_run", "arrival", "get_run", "list_proposals", "decide", "commit",
-    "resume", "run_report", "register", "audit", "findings",
+    "start_run", "arrival", "get_run", "list_runs", "list_proposals", "decide",
+    "commit", "resume", "run_report", "register", "audit", "findings",
 ]
 
 
 # ------------------------------------------------------------------ piles --
 
+# The statuses that mean a document is *not* part of the understanding: its
+# format was refused, or it was quarantined for carrying instructions aimed at
+# the system. Everything else -- 'ingested', 'classified', 'extracted' -- is a
+# document that was read, at some point along the way.
+#
+# Named explicitly because the alternative was `status <> 'ingested'`, which
+# counted pipeline *progress* as failure: a pile whose seven documents had all
+# been classified reported "0 documents, 7 not read" while its register sat
+# there composed from their facts. A read that succeeded must never be displayed
+# as a gap -- gaps are output, and a fake one is as bad as a missing real one.
+GAP_STATUSES = ("quarantined", "unsupported")
+
+
 def list_piles() -> dict[str, Any]:
     with transaction() as conn:
         return {"piles": fetch_all(conn, """
             SELECT p.id, p.name, p.domain, p.created_at,
-                   count(d.id) FILTER (WHERE d.status = 'ingested') AS documents,
-                   count(d.id) FILTER (WHERE d.status <> 'ingested') AS gaps
+                   count(d.id) FILTER (WHERE NOT (d.status = ANY(%s))) AS documents,
+                   count(d.id) FILTER (WHERE d.status = ANY(%s))       AS gaps
             FROM pile p LEFT JOIN document d ON d.pile_id = p.id
             GROUP BY p.id ORDER BY p.name
-        """)}
+        """, (list(GAP_STATUSES), list(GAP_STATUSES)))}
 
 
 def create_pile(name: str, domain: str = "vendor_contracts") -> dict[str, Any]:
@@ -81,11 +94,15 @@ def list_documents(pile_id: str) -> dict[str, Any]:
     with transaction() as conn:
         return {"pile_id": pile_id, "documents": fetch_all(conn, """
             SELECT d.id, d.filename, d.format, d.doc_type, d.status, d.ingest_note,
-                   d.byte_size, d.ingested_at, count(pg.id) AS pages
+                   d.byte_size, d.ingested_at, count(pg.id) AS pages,
+                   -- Answered here rather than by each surface, so that HTTP,
+                   -- MCP and the review UI cannot disagree about whether a
+                   -- document was read.
+                   d.status = ANY(%s) AS is_gap
             FROM document d LEFT JOIN page pg ON pg.document_id = d.id
             WHERE d.pile_id = %s
             GROUP BY d.id ORDER BY d.filename
-        """, (pile_id,))}
+        """, (list(GAP_STATUSES), pile_id))}
 
 
 # -------------------------------------------------------------------- runs --
@@ -131,6 +148,20 @@ def get_run(run_id: str) -> dict[str, Any]:
         run = _require_run(conn, run_id)
         pending = len(repo.list_proposals(conn, run_id, status="pending"))
     return {"run": run, "pending_proposals": pending}
+
+
+def list_runs(pile_id: str, status: str | None = None) -> dict[str, Any]:
+    """This pile's runs, newest first.
+
+    Exists so that a gate can be found again. A run halted for review is a piece
+    of unfinished work that belongs to the pile, not to whichever client started
+    it -- so a reviewer who closed the tab, and an agent that lost its run id,
+    both have a way back to it. Without this the only thing standing between an
+    open gate and an unreachable one is a browser refresh.
+    """
+    _require_pile(pile_id)
+    with transaction() as conn:
+        return {"pile_id": pile_id, "runs": repo.runs_for_pile(conn, pile_id, status)}
 
 
 def run_report(run_id: str) -> dict[str, Any]:

@@ -16,6 +16,7 @@ do, because neither of them knows.
     doctask_start_run           understand the pile; halts at the gate
     doctask_document_arrived    one new document; a targeted update
     doctask_get_run             where a run is
+    doctask_list_runs           a pile's runs — how a gate is found again
     doctask_run_report          what it cost, stage by stage, and which paths
     doctask_list_proposals      what is waiting for a decision
     doctask_decide              approve and reject, item by item
@@ -164,6 +165,17 @@ def doctask_document_arrived(pile_id: str, document: str,
 def doctask_get_run(run_id: str) -> str:
     """Where a run is, and how many items are still undecided."""
     return _result(lambda: ops.get_run(run_id))
+
+
+@server.tool()
+def doctask_list_runs(pile_id: str, status: str | None = None) -> str:
+    """A pile's runs, newest first, with how many items each still holds.
+
+    Filter with `status='awaiting_approval'` to find work stopped at the gate.
+    An agent that lost its run id has this way back to it, rather than starting
+    a second run and leaving the first one's approvals stranded.
+    """
+    return _result(lambda: ops.list_runs(pile_id, status))
 
 
 @server.tool()

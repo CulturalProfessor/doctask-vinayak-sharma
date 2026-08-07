@@ -87,6 +87,12 @@ def arrival(body: ArrivalRun) -> dict:
     return _translate(lambda: ops.arrival(body.pile_id, body.document, body.domain))
 
 
+@router.get("/piles/{pile_id}/runs")
+def list_runs(pile_id: str, status: str | None = None) -> dict:
+    """This pile's runs, newest first — how an open gate is found again."""
+    return _translate(lambda: ops.list_runs(pile_id, status))
+
+
 @router.get("/runs/{run_id}")
 def get_run(run_id: str) -> dict:
     return _translate(lambda: ops.get_run(run_id))

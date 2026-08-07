@@ -45,6 +45,30 @@ def get_run(conn: psycopg.Connection, run_id: str) -> dict[str, Any] | None:
     return fetch_one(conn, "SELECT * FROM run WHERE id = %s", (run_id,))
 
 
+def runs_for_pile(conn: psycopg.Connection, pile_id: str,
+                  status: str | None = None) -> list[dict[str, Any]]:
+    """This pile's runs, newest first, with how many items each still holds.
+
+    A run stopped at the gate is only findable if something can list it. Without
+    this, the only handle on an open gate is whatever the caller happened to
+    keep -- a variable in a browser tab, a run id in a terminal's scrollback --
+    and closing either would strand approved work behind a gate nobody can
+    reach.
+    """
+    sql = """
+        SELECT r.*,
+               count(p.id) FILTER (WHERE p.status = 'pending') AS pending_proposals,
+               count(p.id) AS proposals
+        FROM run r LEFT JOIN proposal p ON p.run_id = r.id
+        WHERE r.pile_id = %s
+    """
+    params: tuple = (pile_id,)
+    if status:
+        sql += " AND r.status = %s"
+        params = (pile_id, status)
+    return fetch_all(conn, sql + " GROUP BY r.id ORDER BY r.started_at DESC", params)
+
+
 def record_stage_event(conn: psycopg.Connection, run_id: str, stage: str,
                        path_taken: str, document_id: str | None = None,
                        ms: int = 0, tokens_in: int = 0, tokens_out: int = 0,
@@ -129,6 +153,20 @@ def execute_quarantine(conn: psycopg.Connection, document_id: str, note: str) ->
     execute(conn, """
         UPDATE document SET status = 'quarantined', ingest_note = %s WHERE id = %s
     """, (note[:2000], document_id))
+
+
+def document_is_unread(conn: psycopg.Connection, document_id: str) -> bool:
+    """True if this document's bytes are stored and nothing has read them.
+
+    `'ingested'` is the state a document is in before any stage has looked at
+    it. Every other status -- classified, escalated, quarantined, unsupported --
+    means something decided about it. The distinction matters because "these
+    bytes are already here" and "these bytes have already been understood" are
+    different claims, and treating the first as the second produces an empty
+    register with a successful-looking run behind it.
+    """
+    row = fetch_one(conn, "SELECT status FROM document WHERE id = %s", (document_id,))
+    return bool(row) and row["status"] == "ingested"
 
 
 def set_document_type(conn: psycopg.Connection, document_id: str, doc_type: str | None,

@@ -71,7 +71,21 @@ class Nodes:
     # ------------------------------------------------------------ ingest --
 
     def ingest(self, state: RunState) -> RunState:
-        """Bytes into the pile. Duplicates are recorded and then left alone."""
+        """Bytes into the pile, and a queue of what still has to be read.
+
+        A document already in the pile is not re-stored -- that is the
+        idempotency the content hash buys. But it is still queued if nothing has
+        ever read it, because *already stored* and *already understood* are
+        different claims and this node used to conflate them.
+
+        The conflation was not theoretical. `docker compose up` seeds the demo
+        pile by ingesting its bytes, so the first real run over that pile found
+        seven duplicates, queued none of them, extracted nothing, and composed a
+        register of six sections with zero citations and fifteen gaps -- while
+        reporting "7 documents" and halting at the gate as though it had worked.
+        The register was at least honest about being empty; the run was not
+        honest about why.
+        """
         run_id, pile_id = state["run_id"], state["pile_id"]
         documents: dict[str, str] = {}
         duplicates: list[str] = []
@@ -91,6 +105,12 @@ class Nodes:
                 documents[result.filename] = result.document_id
             if result.duplicate:
                 duplicates.append(result.filename)
+                # Stored before, never read: this run reads it. A document that
+                # has been classified, escalated or quarantined has been decided
+                # about and is left alone, which is what keeps a re-sent
+                # document a no-op.
+                if repo.document_is_unread(self.conn, result.document_id):
+                    queue.append(source)
                 continue
             if result.status == "ingested":
                 queue.append(source)

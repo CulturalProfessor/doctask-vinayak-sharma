@@ -191,6 +191,7 @@ def test_every_operation_is_reachable_from_the_machine_interface():
         "start_run": "doctask_start_run",
         "arrival": "doctask_document_arrived",
         "get_run": "doctask_get_run",
+        "list_runs": "doctask_list_runs",
         "run_report": "doctask_run_report",
         "resume": "doctask_resume",
         "list_proposals": "doctask_list_proposals",
