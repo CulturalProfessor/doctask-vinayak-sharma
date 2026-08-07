@@ -1,18 +1,17 @@
-"""The HTTP surface.
+"""The HTTP surface: health, piles, and document upload.
 
-Today this covers ingest and inspection only. The run, gate and export
-operations land with the graph -- and whatever the UI can do, this API and the
-MCP server must be able to do too, because a machine has to be able to drive
-the whole flow without a human clicking anything (graded behaviour 4).
+Runs and the gate live in `runs.py`. Both files are thin over
+`app.operations`, which is what keeps this API, the MCP server and the review UI
+able to do exactly the same things (graded behaviour 4).
 """
 from __future__ import annotations
 
 from fastapi import FastAPI, HTTPException, UploadFile
 
-from app.domain.config import ConfigError, load_domain
-from app.ingest.ingest import ensure_pile, ingest_bytes
-from app.api.runs import router as runs_router
-from app.store.engine import fetch_all, fetch_one, transaction
+from app import operations as ops
+from app.api.runs import _translate, router as runs_router
+from app.ingest.ingest import ingest_bytes
+from app.store.engine import fetch_one, transaction
 
 app = FastAPI(title="doctask", version="0.1.0")
 app.include_router(runs_router)
@@ -35,38 +34,17 @@ def health() -> dict:
 
 @app.get("/piles")
 def list_piles() -> dict:
-    with transaction() as conn:
-        rows = fetch_all(conn, """
-            SELECT p.id, p.name, p.domain, p.created_at,
-                   count(d.id) FILTER (WHERE d.status = 'ingested') AS documents,
-                   count(d.id) FILTER (WHERE d.status <> 'ingested') AS gaps
-            FROM pile p LEFT JOIN document d ON d.pile_id = p.id
-            GROUP BY p.id ORDER BY p.name
-        """)
-    return {"piles": rows}
+    return _translate(ops.list_piles)
 
 
 @app.post("/piles")
 def create_pile(name: str, domain: str = "vendor_contracts") -> dict:
-    try:
-        load_domain(domain)
-    except ConfigError as exc:
-        raise HTTPException(400, f"unknown domain {domain!r}: {exc}")
-    with transaction() as conn:
-        return {"pile_id": ensure_pile(conn, name, domain), "name": name, "domain": domain}
+    return _translate(lambda: ops.create_pile(name, domain))
 
 
 @app.get("/piles/{pile_id}/documents")
 def list_documents(pile_id: str) -> dict:
-    with transaction() as conn:
-        rows = fetch_all(conn, """
-            SELECT d.id, d.filename, d.format, d.doc_type, d.status, d.ingest_note,
-                   d.byte_size, d.ingested_at, count(pg.id) AS pages
-            FROM document d LEFT JOIN page pg ON pg.document_id = d.id
-            WHERE d.pile_id = %s
-            GROUP BY d.id ORDER BY d.filename
-        """, (pile_id,))
-    return {"pile_id": pile_id, "documents": rows}
+    return _translate(lambda: ops.list_documents(pile_id))
 
 
 @app.post("/piles/{pile_id}/documents")

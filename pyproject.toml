@@ -11,6 +11,9 @@ dependencies = [
     "langgraph>=1.0",
     "langgraph-checkpoint-postgres>=2.0",
     "psycopg[binary]>=3.1",
+    # The machine surface the brief calls strongest (behaviour 4). Same
+    # operations as the HTTP API -- see app/operations.py.
+    "mcp>=2.0",
     "pyyaml>=6.0",
     "fastapi>=0.111",
     "uvicorn[standard]>=0.30",

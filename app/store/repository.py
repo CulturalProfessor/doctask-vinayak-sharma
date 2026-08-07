@@ -285,18 +285,26 @@ def list_proposals(conn: psycopg.Connection, run_id: str,
 
 
 def decide_proposal(conn: psycopg.Connection, proposal_id: str, approved: bool,
-                    decided_by: str, reason: str | None = None) -> bool:
+                    decided_by: str, reason: str | None = None,
+                    decided_via: str = "direct") -> bool:
     """Record one decision. Returns False if it was already decided.
 
     Decisions are final and are not silently overwritten: a second call on the
     same proposal is refused rather than allowed to flip an earlier judgement
     that something downstream may already have acted on.
+
+    `decided_by` is who the caller says decided; `decided_via` is which surface
+    actually carried it, and the surface sets that rather than the caller. See
+    migrations/003 -- an approval a person clicked and one an agent made through
+    the machine interface must not be indistinguishable afterwards.
     """
     return execute(conn, """
         UPDATE proposal
-        SET status = %s, decided_by = %s, decided_at = now(), reason = %s
+        SET status = %s, decided_by = %s, decided_via = %s,
+            decided_at = now(), reason = %s
         WHERE id = %s AND status = 'pending'
-    """, ("approved" if approved else "rejected", decided_by, reason, proposal_id)) == 1
+    """, ("approved" if approved else "rejected", decided_by, decided_via, reason,
+          proposal_id)) == 1
 
 
 # --------------------------------------------------------------- commit --
