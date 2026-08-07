@@ -889,26 +889,114 @@ recomposed and hashed*, which the screen says in those words.
 
 ---
 
+## The second corpus, and the hole it found
+
+`corpora/pile_northwind/` — nine documents, Northwind Logistics Group and
+Harbourline Freight Systems, drayage rather than fabrication. Not a rename of
+acme: different sector, different document structure, different formats, and
+above all a different answer.
+
+### The claim it exists to support
+
+A system tuned until one corpus comes out right is not a system that works — it
+is a corpus that has been fitted to. So northwind was designed so that **the
+rules acme breaks are the rules northwind satisfies, and the reverse, exactly**:
+
+| | acme | northwind |
+|---|---|---|
+| conflicts | 3 | 1 |
+| violated | `hours_within_sow_cap`, `rate_matches_current_agreement`, `payment_terms_consistent`, `termination_notice_observed` | `invoice_within_term`, `liability_cap_present`, `no_instructions_in_sources` |
+| satisfied | the three northwind breaks | the four acme breaks |
+| unjudgeable | `amendment_references_parent` | `amendment_references_parent` |
+| quarantined | 0 | 1 |
+| unsupported | 0 | 1 |
+| formats exercised | md, txt, html | md, txt, html, **docx**, csv (refused) |
+
+`test_the_answers_are_not_the_same_answers` asserts the two sets are exact
+complements. A playbook whose findings were an artefact of the code rather than
+of the documents could not produce that.
+
+### The case acme does not contain
+
+Northwind's MSA says USD 95 and its amendment says USD 110, so the documents
+disagree and that reaches the gate as a conflict. But every invoice bills at the
+amended rate, so `rate_matches_current_agreement` is **satisfied**. A conflict is
+a question about what the documents say; a finding is a judgement about whether
+anyone is failing to comply. On acme the two fire together, which is exactly the
+configuration in which collapsing them would never be noticed.
+
+### What it found: the register was silent about documents it never read
+
+The deliverable has a section called *What Could Not Be Established*. Until this
+corpus existed it only ever listed missing **fields** — because acme contains no
+quarantined and no unsupported document, so the section was never asked the
+question. Northwind has both, and both were simply absent: a reviewer reading the
+register had no way to learn that two of the nine documents in the pile had never
+been read at all.
+
+Gaps are output, not error handling, and a gap that is silently omitted is worse
+than a missing field, because nothing hints that anything is missing. `_gaps` now
+reports whole documents alongside missing fields, for quarantined, unsupported
+and escalated alike:
+
+```
+| (whole document) | rate_card_2026.csv | the format is not supported, so the document was never read |
+| (whole document) | vendor_letter.md   | quarantined for containing instructions aimed at the system |
+| liability_cap    | —                  | not stated in any document in the pile                      |
+```
+
+Acme's six section hashes are unchanged by this, because acme has no such
+documents — checked, not assumed.
+
+### Two bugs in the recorder, which the handoff tells people to run
+
+`scripts/record_fixtures.py` is the one script a reviewer might actually execute,
+and it could not record this corpus.
+
+**It crashed on a document it was supposed to skip.** An unsupported format
+raised out of `detect_format` and killed the run, so a corpus containing a
+deliberate gap was impossible to record. Ingest refuses that file before any
+stage asks a model about it; the recorder now says so and continues.
+
+**It recorded outages as answers.** The free model returns `502
+ResourceExhausted` under load, and the retry only matched `429`. Worse,
+`classify_document` catches provider errors and turns them into an escalation
+rather than raising — correct in a run, wrong here — so two documents were
+written into the corpus as "escalated, confidence 0.00" and the recording
+finished looking successful with two fixtures missing. It now retries the whole
+capacity family and inspects the returned note, not only the exception.
+
+Both fired on the real re-record: two retries, nine documents handled, 46 facts,
+**$0.00**.
+
+### Standing cost
+
+14 model calls for 9 documents. The quarantined letter costs nothing because the
+deterministic screen fires before the model call — there is no reason to spend a
+call interpreting a document already known to be manipulating the interpreter,
+and doing so would give the manipulation one chance to work. The refused csv
+costs nothing because it never reaches a stage.
+
+---
+
 ## PICK UP HERE
 
 ### State as of 2026-08-07
 
-31 commits (this one included — the count has been wrong twice by being written
-before the commit that carries it), 245 tests green offline, $0.00 spent. **Behaviours 1–10 all done**,
-**all three movements exist** — understand, examine, stay alive — and there are
-**three working surfaces** over one operations layer: HTTP, MCP, and a review UI
-at `/review/`. Verified against `docker compose up` from a cold, volume-less
-start, not only in the suite.
+33 commits (this one included — the count has been wrong twice by being written
+before the commit that carries it), 252 tests green offline, $0.00 spent.
+**Behaviours 1–10 all done**, **all three movements exist** — understand,
+examine, stay alive — **three working surfaces** over one operations layer
+(HTTP, MCP, and a review UI at `/review/`), and **two corpora that produce
+different answers**. Verified against `docker compose up` from a cold,
+volume-less start, not only in the suite.
 
 ### Remaining, in order
 
-1. **Second corpus `pile_northwind`** — currently empty; seeding skips it
-   gracefully and the README now says so instead of claiming two corpora ship.
-   Genuinely different documents, so "it works the second time" holds. The
-   register and the playbook should both come out different.
-2. **README** — still has TODO sections (architecture, the calls I made, what it
+1. **README** — still has TODO sections (architecture, the calls I made, what it
    does not do). The false claims are gone; the missing ones are not written.
-3. **Tasks 2, 3, 4** — the SuperDocs build (separate repo), the use-case list,
+   This is the one a reviewer reads first, so it is the next thing worth doing.
+2. **Tasks 2, 3, 4** — the SuperDocs build (separate repo), the use-case list,
    and the demo video plus write-up.
 
 ### Two gaps still open, and they are decisions rather than work

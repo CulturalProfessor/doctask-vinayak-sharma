@@ -65,14 +65,17 @@ citations are honest at page granularity — PDF text extraction does not give
 reliable offsets back into the original layout, and pretending otherwise would
 make every PDF citation quietly wrong.
 
-One full corpus ships today:
+Two corpora ship, and they are deliberately not variations on each other:
 
-- `corpora/pile_acme/` — seven documents, three real conflicts, four rule
-  violations.
-- `corpora/pile_northwind/` — **empty.** A second corpus with different
-  counterparties and a different conflict profile is planned and not written;
-  seeding skips it rather than pretending. Until it exists, "it works on a
-  second pile" is not a claim this repo gets to make.
+- `corpora/pile_acme/` — seven documents. Three conflicts, four rule violations.
+- `corpora/pile_northwind/` — nine documents, a different counterparty in a
+  different sector. One conflict, three violations, one document that tries to
+  give the system orders, and one in a format the system refuses.
+
+The rules that fire on acme are the rules that pass on northwind, and the
+reverse, exactly — there is a test asserting it. That inversion is the point of
+having a second corpus: a playbook whose findings were an artefact of the code
+rather than of the documents would produce the same shape on both.
 
 Every document is fabricated. No real vendor, client or employer material.
 
@@ -97,7 +100,7 @@ docker compose up -d db
 .venv/bin/python -m pytest
 ```
 
-245 tests, all green. Runs with no API key and no network — `LLM_PROVIDER=fake`
+252 tests, all green. Runs with no API key and no network — `LLM_PROVIDER=fake`
 uses a deterministic recorded provider, and there is a test that fails if
 anything in the suite reaches the network. The tests that matter target
 behaviours, not mocks: a run killed with `SIGKILL` mid-extraction and resumed,
