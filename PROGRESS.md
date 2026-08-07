@@ -770,7 +770,7 @@ citations and character offsets on every violation.
 
 ### State as of 2026-08-07
 
-27 commits, 239 tests green offline, $0.00 spent. **Behaviours 1–10 all done**,
+25 commits, 239 tests green offline, $0.00 spent. **Behaviours 1–10 all done**,
 and **all three movements exist** — understand, examine, stay alive. Verified
 against `docker compose up`, not only in the suite.
 
