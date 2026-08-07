@@ -17,29 +17,50 @@ import time
 from pathlib import Path
 
 from app.domain.config import load_domain
-from app.ingest.formats import detect_format, extract_pages
+from app.ingest.formats import UnsupportedFormat, detect_format, extract_pages
 from app.llm.base import ProviderError, get_provider
 from app.settings import REPO_ROOT, settings
 from app.stages.classify import classify_document
 from app.stages.extract import extract_document
 
-MAX_RETRIES = 5
+MAX_RETRIES = 6
+
+# What "the free tier is full" looks like, which is not the same as "the request
+# was wrong". A shared zero-cost model answers a 429 sometimes and a 502 saying
+# ResourceExhausted other times, and the second is what actually happened here:
+# two documents came back unclassified with `escalate` and a 502 in the note,
+# and the recording completed looking successful with two fixtures missing.
+# Retrying only on 429 meant capacity failures were silently written into the
+# corpus as escalations.
+_RETRYABLE = ("rate limit", "429", "resourceexhausted", "resource exhausted",
+              "temporarily unavailable", "502", "503", "overloaded", "capacity")
 
 
 def with_backoff(label: str, fn, *args, **kwargs):
-    """Retry rate limits, but never retry a real error into silence."""
+    """Retry capacity failures, but never retry a real error into silence."""
     delay = 8.0
     for attempt in range(1, MAX_RETRIES + 1):
         try:
-            return fn(*args, **kwargs)
+            result = fn(*args, **kwargs)
         except ProviderError as exc:
-            retryable = "rate limit" in str(exc).lower() or "429" in str(exc)
-            if not retryable or attempt == MAX_RETRIES:
-                raise
-            print(f"      rate limited on {label}, waiting {delay:.0f}s "
-                  f"(attempt {attempt}/{MAX_RETRIES})")
-            time.sleep(delay)
-            delay *= 1.8
+            message = str(exc)
+        else:
+            # classify_document catches provider errors and turns them into an
+            # escalation rather than raising, which is correct in a run and
+            # wrong here: a fixture that records "the provider was busy" is a
+            # fixture that makes the offline suite replay an outage.
+            note = getattr(result, "note", None) or ""
+            if not any(word in note.lower() for word in _RETRYABLE):
+                return result
+            message = note
+
+        if not any(word in message.lower() for word in _RETRYABLE) \
+                or attempt == MAX_RETRIES:
+            raise ProviderError(f"{label}: {message}")
+        print(f"      provider busy on {label}, waiting {delay:.0f}s "
+              f"(attempt {attempt}/{MAX_RETRIES})")
+        time.sleep(delay)
+        delay *= 1.8
     raise ProviderError(f"gave up on {label}")
 
 
@@ -64,13 +85,26 @@ def main() -> int:
     print(f"recording against {getattr(provider, 'model', provider.name)}")
     print(f"corpus: {directory} ({len(paths)} documents)\n")
 
-    totals = {"classified": 0, "escalate": 0, "quarantine": 0, "facts": 0, "gaps": 0}
+    totals = {"classified": 0, "escalate": 0, "quarantine": 0, "unsupported": 0,
+              "facts": 0, "gaps": 0}
     cost = 0.0
 
     for path in paths:
         data = path.read_bytes()
-        text = extract_pages(data, detect_format(path, data))[0].text
         print(f"  {path.name}")
+
+        try:
+            fmt = detect_format(path, data)
+        except UnsupportedFormat as exc:
+            # A corpus is allowed to contain a document the system refuses. That
+            # is a gap, which is output, and it needs no recording -- ingest
+            # rejects the file before any stage asks a model about it. Crashing
+            # here made a deliberately realistic corpus impossible to record.
+            print(f"      unsupported -> no model call needed ({exc})")
+            totals["unsupported"] += 1
+            continue
+
+        text = extract_pages(data, fmt)[0].text
 
         result = with_backoff(f"classify {path.name}", classify_document,
                               provider, cfg, path.name, text)
