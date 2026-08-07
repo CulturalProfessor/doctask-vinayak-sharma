@@ -7,10 +7,13 @@ able to do exactly the same things (graded behaviour 4).
 from __future__ import annotations
 
 from fastapi import FastAPI, HTTPException, UploadFile
+from fastapi.responses import RedirectResponse
+from fastapi.staticfiles import StaticFiles
 
 from app import operations as ops
 from app.api.runs import _translate, router as runs_router
 from app.ingest.ingest import ingest_bytes
+from app.settings import REPO_ROOT
 from app.store.engine import fetch_one, transaction
 
 app = FastAPI(title="doctask", version="0.1.0")
@@ -64,3 +67,24 @@ async def upload_document(pile_id: str, file: UploadFile) -> dict:
         "pages": result.pages,
         "note": result.note,
     }
+
+
+# ------------------------------------------------------------- the review UI --
+#
+# Served from the same origin as the API, under a prefix that cannot shadow an
+# endpoint. The UI is a client of the routes above and of nothing else -- there
+# is no server-rendered view and no UI-only endpoint, which is what keeps
+# "anything a person can do here, a program can do too" a structural fact rather
+# than a promise.
+#
+# Mounted only if the bundle is present. `docker build` produces it; a developer
+# running uvicorn against a fresh clone has no `web/dist`, and refusing to start
+# over a missing front-end would make the API depend on node.
+_BUNDLE = REPO_ROOT / "web" / "dist"
+
+if (_BUNDLE / "index.html").is_file():
+    app.mount("/review", StaticFiles(directory=_BUNDLE, html=True), name="review")
+
+    @app.get("/", include_in_schema=False)
+    def home() -> RedirectResponse:
+        return RedirectResponse("/review/")

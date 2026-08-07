@@ -1,0 +1,31 @@
+# Keeps the build context to what the image actually needs.
+#
+# The one that matters is `web/node_modules`: without it, `COPY web/ ./` drops
+# the host's install on top of the one the build stage just made, so the image
+# would be built against whatever happened to be on the developer's machine
+# rather than against package-lock.json. `web/dist` is excluded for the same
+# reason -- the image must contain the bundle this build produced, not a stale
+# one someone built locally.
+.git/
+.gitignore
+
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+web/node_modules/
+web/dist/
+web/.vite/
+
+.env
+.env.*
+!.env.example
+*.key
+
+.runs/
+exports/
