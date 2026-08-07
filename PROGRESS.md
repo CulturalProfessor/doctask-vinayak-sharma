@@ -995,22 +995,36 @@ examine, stay alive — **three working surfaces** over one operations layer
 different answers**. Verified against `docker compose up` from a cold,
 volume-less start, not only in the suite.
 
-### Remaining, in order
+**Task 1 is complete.** Every graded behaviour, all three movements, three
+surfaces, two corpora, and the documentation to read it by.
 
-1. **README** — still has TODO sections (architecture, the calls I made, what it
-   does not do). The false claims are gone; the missing ones are not written.
-   This is the one a reviewer reads first, so it is the next thing worth doing.
-2. **Tasks 2, 3, 4** — the SuperDocs build (separate repo), the use-case list,
-   and the demo video plus write-up.
+### Remaining
 
-### Two gaps still open, and they are decisions rather than work
+**Tasks 2, 3 and 4**, none of which is code in this repo:
 
-- **No folder watcher.** `WATCH_DIR` is set in `docker-compose.yml` and nothing
-  consumes it. PLAN.md claims one. Either build it or stop claiming it; leaving
-  both is the only unacceptable option.
-- **pgvector is unused.** The embedding column exists and nothing populates or
-  queries it. This is cut-list item 2 already taken in practice — it should be
-  declared cut rather than left looking like an oversight.
+1. **Task 2 — the SuperDocs build.** Product Manual and Quick-Start Builder,
+   shipping as a PR into `superdocsapp/superdocs-builds` at
+   `use-cases/CulturalProfessor/`. The four-call spine is verified working; see
+   PLAN.md §4 for the three graded criteria and the mechanism answering each.
+2. **Task 3 — the use-case list.**
+3. **Task 4 — the demo video and write-up.** PLAN.md §5 has the schedule; the
+   material is in this file under "Worth putting in the write-up", and the
+   README's *The calls I made* is most of the argument already.
+
+### The two open gaps, now decided
+
+Both were "either do it or stop claiming it", and both were resolved by
+stopping the claim in writing rather than by leaving the discrepancy.
+
+- **No folder watcher.** PLAN.md said documents "land in a watched folder"; none
+  was built. Arrival is an operation and something outside the system calls it.
+  PLAN now carries a *Built differently from this plan* note, and the README
+  says it under "What it does not do". `WATCH_DIR` stays in compose, unconsumed
+  and declared.
+- **pgvector is cut.** Cut-list item 2, taken. Exact and fuzzy span matching do
+  the retrieval job at this corpus size and semantic search would have added
+  latency for no measured gain. The column stays so the option reads as
+  considered rather than quietly dropped; both PLAN and README say so.
 
 ### Worth putting in the write-up
 
