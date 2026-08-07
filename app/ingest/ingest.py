@@ -65,26 +65,38 @@ def ingest_bytes(conn: psycopg.Connection, pile_id: str, filename: str, data: by
     try:
         fmt = detect_format(path, data)
     except UnsupportedFormat as exc:
-        doc_id = _insert_document(conn, pile_id, uri or filename, filename, digest,
-                                  len(data), "unknown", "unsupported", str(exc))
+        doc_id, _ = _insert_document(conn, pile_id, uri or filename, filename, digest,
+                                     len(data), "unknown", "unsupported", str(exc))
         return IngestResult(doc_id, filename, digest, None, "unsupported", False, note=str(exc))
 
     try:
         pages: list[ExtractedPage] = extract_pages(data, fmt)
     except Exception as exc:  # a corrupt PDF is a gap, not a crash
         note = f"could not extract text: {type(exc).__name__}: {exc}"
-        doc_id = _insert_document(conn, pile_id, uri or filename, filename, digest,
-                                  len(data), fmt, "unsupported", note)
+        doc_id, _ = _insert_document(conn, pile_id, uri or filename, filename, digest,
+                                     len(data), fmt, "unsupported", note)
         return IngestResult(doc_id, filename, digest, fmt, "unsupported", False, note=note)
 
     if not pages:
         note = "no extractable text"
-        doc_id = _insert_document(conn, pile_id, uri or filename, filename, digest,
-                                  len(data), fmt, "empty", note)
+        doc_id, _ = _insert_document(conn, pile_id, uri or filename, filename, digest,
+                                     len(data), fmt, "empty", note)
         return IngestResult(doc_id, filename, digest, fmt, "empty", False, note=note)
 
-    doc_id = _insert_document(conn, pile_id, uri or filename, filename, digest,
-                              len(data), fmt, "ingested", None)
+    doc_id, created = _insert_document(conn, pile_id, uri or filename, filename,
+                                       digest, len(data), fmt, "ingested", None)
+    if not created:
+        # Lost the race. The other writer's document is the real one and it is
+        # inserting the pages, so writing ours would either collide on
+        # (document_id, page_no) or duplicate its text. This is the same answer
+        # the fast path above gives for bytes we already held, and it has to be,
+        # because "these bytes are already in the pile" is true either way.
+        return IngestResult(
+            document_id=doc_id, filename=filename, sha256=digest, format=fmt,
+            status="ingested", duplicate=True,
+            note="identical bytes ingested concurrently by another run; no change",
+        )
+
     with conn.cursor() as cur:
         cur.executemany(
             "INSERT INTO page (document_id, page_no, text) VALUES (%s, %s, %s)",
@@ -95,7 +107,14 @@ def ingest_bytes(conn: psycopg.Connection, pile_id: str, filename: str, data: by
 
 def _insert_document(conn: psycopg.Connection, pile_id: str, uri: str, filename: str,
                      digest: str, size: int, fmt: str, status: str,
-                     note: str | None) -> str:
+                     note: str | None) -> tuple[str, bool]:
+    """Insert the document, or find the one that beat us to it.
+
+    Returns whether *this* call created the row, and the caller has to care.
+    Reporting a lost race as a fresh ingest is how a second writer ends up
+    inserting pages for someone else's document and queueing it for extraction
+    a second time.
+    """
     row = fetch_one(
         conn,
         """
@@ -108,7 +127,7 @@ def _insert_document(conn: psycopg.Connection, pile_id: str, uri: str, filename:
         (pile_id, uri, filename, digest, size, fmt, status, note),
     )
     if row:
-        return str(row["id"])
+        return str(row["id"]), True
     # Lost a race with a concurrent ingest of the same bytes. The other writer
     # won; its row is the right one. Two runs at once stay two runs.
     row = fetch_one(
@@ -117,7 +136,7 @@ def _insert_document(conn: psycopg.Connection, pile_id: str, uri: str, filename:
         (pile_id, digest),
     )
     assert row is not None, "unique conflict but no row: schema drift"
-    return str(row["id"])
+    return str(row["id"]), False
 
 
 def ingest_path(conn: psycopg.Connection, pile_id: str, path: Path) -> IngestResult:

@@ -54,16 +54,36 @@ def execute(conn: psycopg.Connection, sql: str, params: tuple = ()) -> int:
         return cur.rowcount
 
 
-def advisory_lock(conn: psycopg.Connection, key: str, wait: bool = True) -> bool:
-    """Serialise writers on one pile without serialising the whole database.
+# A namespace for this application's advisory locks, so a key collision can
+# only ever be with another doctask lock rather than with anything else that
+# happens to share the database.
+LOCK_NAMESPACE = 0x646F6374  # "doct"
 
-    Two runs at the same time must stay two runs (graded behaviour 9). Postgres
-    advisory locks are scoped to the session, so this is released when the
-    connection closes -- including when the process is killed, which is exactly
-    what resumability needs.
+
+def try_session_lock(conn: psycopg.Connection, key: str) -> bool:
+    """Take a lock on one pile without serialising the whole database.
+
+    Two runs at once must stay two runs (graded behaviour 9), and the lock has
+    to be **session**-scoped rather than transaction-scoped. That is not a
+    preference: a run's transaction now closes at every checkpoint, so a
+    transaction-scoped lock would be dropped and retaken between every pair of
+    stages -- which is a lock that is absent exactly when a second run is most
+    likely to slip past it.
+
+    Session scope also gets the failure case right for free. The lock lives on
+    the connection the run owns for its whole life, so a killed process releases
+    the pile the moment its socket closes. A run that dies must not leave the
+    pile locked against the process that comes to resume it.
     """
-    fn = "pg_advisory_xact_lock" if wait else "pg_try_advisory_xact_lock"
     with conn.cursor() as cur:
-        cur.execute(f"SELECT {fn}(hashtext(%s))", (key,))
-        row = cur.fetchone()
-    return True if wait else bool(next(iter(row.values())))
+        cur.execute("SELECT pg_try_advisory_lock(%s, hashtext(%s)) AS taken",
+                    (LOCK_NAMESPACE, key))
+        return bool(cur.fetchone()["taken"])
+
+
+def release_session_lock(conn: psycopg.Connection, key: str) -> None:
+    """Give the pile back. Closing the connection would do it too; this makes
+    the release visible at the point the run actually stops working on it."""
+    with conn.cursor() as cur:
+        cur.execute("SELECT pg_advisory_unlock(%s, hashtext(%s))",
+                    (LOCK_NAMESPACE, key))

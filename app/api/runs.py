@@ -21,6 +21,7 @@ from pydantic import BaseModel, Field
 
 from app.domain.config import ConfigError, load_domain
 from app.graph import pipeline
+from app.graph.locking import PileBusy
 from app.llm.base import ProviderError, ProviderUnavailable, get_provider
 from app.settings import REPO_ROOT
 from app.stages import gate as gate_module
@@ -61,7 +62,7 @@ def _summary(result: pipeline.RunResult) -> dict:
         "note": result.note,
         "documents": len(result.documents),
         "duplicates": result.duplicates,
-        "facts": result.facts,
+        "facts": result.fact_count,
         "gaps": len(result.gaps),
         "conflicts": len(result.conflicts),
         "quarantined": [row["document"] for row in result.quarantined],
@@ -100,6 +101,10 @@ def start_run(body: StartRun) -> dict:
 
     try:
         result = pipeline.run_understand(get_provider(), cfg, body.pile_id, paths)
+    except PileBusy as exc:
+        # 409, not 500 and not a queue. The caller is told which run has the
+        # pile and that nothing was written, and can decide what to do.
+        raise HTTPException(409, str(exc))
     except ProviderUnavailable as exc:
         # The deployment cannot reach a model at all. Reporting this as a
         # per-document escalation would produce a run that looks healthy and
@@ -121,6 +126,8 @@ def arrival(body: ArrivalRun) -> dict:
 
     try:
         result = pipeline.run_incremental(get_provider(), cfg, body.pile_id, path)
+    except PileBusy as exc:
+        raise HTTPException(409, str(exc))
     except ProviderUnavailable as exc:
         raise HTTPException(503, f"model provider unavailable: {exc}")
     except ProviderError as exc:
@@ -184,7 +191,7 @@ def commit(run_id: str) -> dict:
         result = pipeline.resume(get_provider(), run_id=run_id)
     except LookupError as exc:
         raise HTTPException(404, str(exc))
-    except ValueError as exc:
+    except (PileBusy, ValueError) as exc:
         raise HTTPException(409, str(exc))
     return {"run_id": run_id, "status": result.status, **(result.committed or {})}
 
@@ -201,6 +208,8 @@ def resume(run_id: str) -> dict:
         result = pipeline.resume(get_provider(), run_id=run_id)
     except LookupError as exc:
         raise HTTPException(404, str(exc))
+    except PileBusy as exc:
+        raise HTTPException(409, str(exc))
     return _summary(result)
 
 

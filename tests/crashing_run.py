@@ -22,6 +22,16 @@ die-here hook it would never use in anger. Two points matter:
                             commit. This is the case the model-call ledger
                             exists for: the answer was bought, the work that
                             asked for it was not. Resume must reuse the answer.
+
+It can also be made to hold a run open rather than end it, which is how
+`tests/test_concurrency.py` gets two processes to contend for one pile on
+purpose:
+
+    --stall-at-persist N    sleep inside the Nth extract, holding the pile.
+
+A run refused because another process holds the pile reports that on stdout and
+exits 0. Being turned away is an outcome, not a failure, and the test has to be
+able to tell it from a crash.
 """
 from __future__ import annotations
 
@@ -52,6 +62,54 @@ def _arm_model_call_kill(nth: int) -> None:
     fake.FakeProvider.complete = counted
 
 
+def _arm_ingest_stall(nth: int, seconds: float) -> None:
+    """Sleep inside the ingest node, after the Nth document.
+
+    A different race from the persist stall and a worse one: two runs in ingest
+    at the same time is where the pile can double, because a document that lost
+    the insert race is still reported as a fresh ingest and still queued for
+    extraction.
+    """
+    import time
+
+    from app.ingest import ingest as ingest_mod
+    from app.graph import nodes as nodes_mod
+
+    original = ingest_mod.ingest_path
+    calls = {"n": 0}
+
+    def counted(*args, **kwargs):
+        result = original(*args, **kwargs)
+        calls["n"] += 1
+        if calls["n"] == nth:
+            print(json.dumps({"event": "stalling"}), flush=True)
+            time.sleep(seconds)
+        return result
+
+    nodes_mod.ingest_path = counted
+
+
+def _arm_persist_stall(nth: int, seconds: float) -> None:
+    """Hold the run open inside a node, so a second process reliably finds the
+    pile busy. Sleeping in a node is how contention is made deterministic
+    without either process knowing about the other."""
+    import time
+
+    from app.store import repository as repo
+
+    original = repo.persist_facts
+    calls = {"n": 0}
+
+    def counted(*args, **kwargs):
+        calls["n"] += 1
+        if calls["n"] == nth:
+            print(json.dumps({"event": "stalling"}), flush=True)
+            time.sleep(seconds)
+        return original(*args, **kwargs)
+
+    repo.persist_facts = counted
+
+
 def _arm_persist_kill(nth: int) -> None:
     from app.store import repository as repo
 
@@ -78,12 +136,20 @@ def main() -> int:
     parser.add_argument("--resume", default=None, metavar="RUN_ID")
     parser.add_argument("--die-at-model-call", type=int, default=0)
     parser.add_argument("--die-at-persist", type=int, default=0)
+    parser.add_argument("--stall-at-persist", type=int, default=0)
+    parser.add_argument("--stall-at-ingest", type=int, default=0)
+    parser.add_argument("--stall-seconds", type=float, default=4.0)
+    parser.add_argument("--wait-seconds", type=float, default=2.0)
     args = parser.parse_args()
 
     if args.die_at_model_call:
         _arm_model_call_kill(args.die_at_model_call)
     if args.die_at_persist:
         _arm_persist_kill(args.die_at_persist)
+    if args.stall_at_persist:
+        _arm_persist_stall(args.stall_at_persist, args.stall_seconds)
+    if args.stall_at_ingest:
+        _arm_ingest_stall(args.stall_at_ingest, args.stall_seconds)
 
     from app.domain.config import load_domain
     from app.graph import pipeline
@@ -92,12 +158,20 @@ def main() -> int:
 
     cfg = load_domain("vendor_contracts")
 
-    if args.resume:
-        result = pipeline.resume(FakeProvider(), cfg, run_id=args.resume)
-    else:
-        directory = REPO_ROOT / "corpora" / args.corpus
-        paths = sorted(p for p in directory.glob("*") if p.is_file())
-        result = pipeline.run_understand(FakeProvider(), cfg, args.pile, paths)
+    try:
+        if args.resume:
+            result = pipeline.resume(FakeProvider(), cfg, run_id=args.resume,
+                                     wait_seconds=args.wait_seconds)
+        else:
+            directory = REPO_ROOT / "corpora" / args.corpus
+            paths = sorted(p for p in directory.glob("*") if p.is_file())
+            result = pipeline.start(FakeProvider(), cfg, args.pile, paths,
+                                    wait_seconds=args.wait_seconds)
+    except pipeline.PileBusy as exc:
+        # Refused, not failed. Reported on stdout so the parent can tell the
+        # difference between "another run has the pile" and a crash.
+        print(json.dumps({"refused": "pile_busy", "detail": str(exc)}))
+        return 0
 
     print(json.dumps({
         "run_id": result.run_id,

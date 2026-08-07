@@ -27,6 +27,7 @@ from langgraph.types import Command
 from app.domain.config import DomainConfig, load_domain
 from app.graph.build import build_graph
 from app.graph.checkpoint import DurableSaver, run_connection, thread_config
+from app.graph.locking import PileBusy, hold_pile
 from app.graph.nodes import Nodes
 from app.graph.state import RunState, new_state, register_from_state
 from app.llm.base import Provider
@@ -172,22 +173,21 @@ class RunResult:
 # ------------------------------------------------------------------- driving --
 
 def start(provider: Provider, cfg: DomainConfig, pile_id: str,
-          sources: Iterable[Path], kind: str = "full") -> RunResult:
-    """Understand a pile, or a document arriving into one, and halt at the gate."""
+          sources: Iterable[Path], kind: str = "full",
+          wait_seconds: float = 2.0) -> RunResult:
+    """Understand a pile, or a document arriving into one, and halt at the gate.
+
+    Raises `PileBusy` if another run holds the pile. Note the ordering: the pile
+    is taken *before* the run row is written, so a refused run leaves no trace
+    of a run that never happened.
+    """
     paths = [str(Path(p).resolve()) for p in sorted(sources)]
-
-    # The run row has to exist and be visible before anything else: the
-    # checkpoint thread is named after it, and the model-call ledger points at
-    # it from a different connection.
-    with connect() as bootstrap:
-        run_id = repo.create_run(bootstrap, pile_id, kind=kind)
-
-    return _drive(provider, cfg, run_id, pile_id,
-                  new_state(run_id, pile_id, cfg.name, kind, paths))
+    return _drive(provider, cfg, None, pile_id, kind=kind, sources=paths,
+                  wait_seconds=wait_seconds)
 
 
 def resume(provider: Provider, cfg: DomainConfig | None = None,
-           run_id: str = "") -> RunResult:
+           run_id: str = "", wait_seconds: float = 2.0) -> RunResult:
     """Continue a run from its last committed checkpoint.
 
     Works for a run that was killed and for a run that is waiting on a reviewer;
@@ -200,13 +200,31 @@ def resume(provider: Provider, cfg: DomainConfig | None = None,
         pile = fetch_one(conn, "SELECT domain FROM pile WHERE id = %s",
                          (run["pile_id"],))
     cfg = cfg or load_domain(pile["domain"])
-    return _drive(provider, cfg, run_id, str(run["pile_id"]), None)
+    return _drive(provider, cfg, run_id, str(run["pile_id"]),
+                  wait_seconds=wait_seconds)
 
 
-def _drive(provider: Provider, cfg: DomainConfig, run_id: str, pile_id: str,
-           initial: RunState | None) -> RunResult:
-    config = thread_config(run_id)
-    with run_connection() as conn:
+def _drive(provider: Provider, cfg: DomainConfig, run_id: str | None, pile_id: str,
+           kind: str = "full", sources: list[str] | None = None,
+           wait_seconds: float = 2.0) -> RunResult:
+    """One working phase of one run, holding the pile for its duration.
+
+    Starting and resuming share this because they are the same thing: take the
+    pile, do as much as can be done without a person, give the pile back.
+    """
+    with run_connection() as conn, hold_pile(conn, pile_id, wait_seconds):
+        # The run row is written only once the pile is actually held, so a
+        # refused run leaves no record of a run that never happened. It is
+        # committed straight away because two other things point at it from
+        # elsewhere: the checkpoint thread is named after it, and the model-call
+        # ledger writes on a connection of its own.
+        initial: RunState | None = None
+        if run_id is None:
+            run_id = repo.create_run(conn, pile_id, kind=kind)
+            conn.commit()
+            initial = new_state(run_id, pile_id, cfg.name, kind, sources or [])
+
+        config = thread_config(run_id)
         durable = DurableProvider(provider, run_id)
         try:
             saver = DurableSaver(conn)
@@ -292,4 +310,4 @@ def run_incremental(provider: Provider, cfg: DomainConfig, pile_id: str,
 
 
 __all__ = ["start", "resume", "run_understand", "run_incremental",
-           "RunResult", "Delta", "GateView"]
+           "RunResult", "Delta", "GateView", "PileBusy"]

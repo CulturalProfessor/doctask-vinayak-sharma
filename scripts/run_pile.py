@@ -82,7 +82,7 @@ def main() -> int:
 
     _print_report(result.run_id)
 
-    print(f"\nfacts {result.facts}   gaps {len(result.gaps)}   "
+    print(f"\nfacts {result.fact_count}   gaps {len(result.gaps)}   "
           f"conflicts {len(result.conflicts)}   "
           f"quarantined {len(result.quarantined)}   escalated {len(result.escalated)}")
     print(f"model calls issued {result.model_calls}   replayed {result.replayed_calls}")
