@@ -12,30 +12,39 @@ import pytest
 
 from app.domain.config import load_domain
 from app.domain.models import SourcedFact
-from app.graph.understand import understand_pile
+from app.graph import pipeline
 from app.llm.fake import FakeProvider, MissingFixture
 from app.stages.compose import NOT_ESTABLISHED, compose
 from app.stages.reconcile import reconcile
 from tests.conftest import CORPORA
 
+pytestmark = pytest.mark.db
+
 ACME = sorted(p for p in (CORPORA / "pile_acme").glob("*") if p.is_file())
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 def cfg():
     return load_domain("vendor_contracts")
 
 
-@pytest.fixture(scope="module")
-def report(cfg):
+@pytest.fixture
+def report(pile, cfg):
+    """One real run through the graph.
+
+    This needs the database, and that is not incidental. There is exactly one
+    orchestrator now; a second, database-free one kept around for the
+    convenience of these tests is how the entity-resolution fix came to exist on
+    one path and not the other (see PROGRESS.md).
+    """
     try:
-        return understand_pile(FakeProvider(), cfg, ACME)
+        return pipeline.run_understand(FakeProvider(), cfg, pile, ACME)
     except MissingFixture as exc:
         pytest.skip(f"fixtures not recorded: {exc}")
 
 
 def _conflict(report, field):
-    return next((c for c in report.reconciliation.conflicts if c.field == field), None)
+    return next((c for c in report.conflicts if c.field == field), None)
 
 
 # ------------------------------------------------------------ reconcile --
@@ -43,7 +52,7 @@ def _conflict(report, field):
 def test_exactly_the_three_real_disagreements_are_found(report):
     """The corpus was built with three contractual disagreements in it. Finding
     more than three means noise; finding fewer means a miss."""
-    assert {c.field for c in report.reconciliation.conflicts} == {
+    assert {c.field for c in report.conflicts} == {
         "hourly_rate", "liability_cap", "payment_terms_days"
     }
 
@@ -52,7 +61,7 @@ def test_per_document_fields_are_not_reported_as_disagreements(report):
     """Three invoices legitimately have three invoice numbers, dates and
     amounts. Reporting those as conflicts would bury the three real ones under
     six false ones, and a reviewer stops reading long before that."""
-    fields = {c.field for c in report.reconciliation.conflicts}
+    fields = {c.field for c in report.conflicts}
     for noisy in ("invoice_number", "invoice_date", "amount_due",
                   "hours_billed", "service_period", "effective_date"):
         assert noisy not in fields
@@ -82,7 +91,7 @@ def test_the_agreement_outranks_an_invoice_on_payment_terms(report):
 def test_a_proposal_is_only_ever_a_proposal(report):
     """The load-bearing restraint. Nothing in reconciliation writes a resolved
     value anywhere; the conflict stays open until a person acts."""
-    for conflict in report.reconciliation.conflicts:
+    for conflict in report.conflicts:
         assert len(conflict.members) > 1, "a resolved conflict would have collapsed"
         assert len(conflict.distinct_values) > 1
         assert conflict.rationale, "a proposal without reasoning is just an assertion"
@@ -158,7 +167,7 @@ def test_the_disagreements_section_says_nothing_is_resolved(report):
 def test_composition_is_deterministic(cfg, report):
     """Load-bearing for the incremental update: identical facts must render
     identical bytes, or every section would look changed on every run."""
-    again = compose(cfg, report.facts, report.reconciliation.conflicts, report.gaps)
+    again = compose(cfg, report.facts, report.conflicts, report.gap_pairs)
     assert again.hashes == report.register.hashes
     assert again.render() == report.register.render()
 
@@ -180,7 +189,7 @@ def test_changing_one_fact_changes_only_its_section_hash(cfg, report):
         else:
             edited.append(sourced)
 
-    after = compose(cfg, edited, reconcile(cfg, edited).conflicts, report.gaps)
+    after = compose(cfg, edited, reconcile(cfg, edited).conflicts, report.gap_pairs)
     changed = {k for k, v in after.hashes.items() if report.register.hashes[k] != v}
     assert "risk" in changed, "the section holding liability_cap must change"
     assert "parties" not in changed and "billing" not in changed
@@ -201,9 +210,16 @@ def test_fields_no_document_states_appear_in_the_gaps_section(cfg, report):
 def test_the_run_reports_what_it_cost_by_stage(report):
     """Behaviour 10, falling out of the same record that makes stages watchable."""
     costs = report.cost_by_stage()
-    assert set(costs) == {"classify", "extract", "reconcile", "compose"}
+    assert set(costs) == {"ingest", "classify", "extract", "resolve_entity",
+                          "reconcile", "compose", "delta", "gate"}
     assert costs["classify"]["calls"] == 7
     assert costs["extract"]["tokens_in"] > 0
+    # Only the two stages that talk to a model may report a cost. If a stage
+    # that does pure CPU ever shows tokens, something is calling a model
+    # somewhere it was not meant to and the cost report has stopped meaning
+    # what it says.
+    spending = {stage for stage, row in costs.items() if row["tokens_in"]}
+    assert spending == {"classify", "extract"}
 
 
 def test_the_run_records_which_path_each_stage_took(report):

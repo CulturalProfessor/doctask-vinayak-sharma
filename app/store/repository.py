@@ -35,7 +35,7 @@ def create_run(conn: psycopg.Connection, pile_id: str, kind: str = "full",
 def set_run_status(conn: psycopg.Connection, run_id: str, status: str) -> None:
     execute(conn, """
         UPDATE run SET status = %s,
-               ended_at = CASE WHEN %s IN ('committed', 'failed', 'cancelled')
+               ended_at = CASE WHEN %s IN ('committed', 'failed', 'cancelled', 'no_change')
                                THEN now() ELSE ended_at END
         WHERE id = %s
     """, (status, status, run_id))
@@ -56,6 +56,15 @@ def record_stage_event(conn: psycopg.Connection, run_id: str, stage: str,
         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
     """, (run_id, stage, path_taken, document_id, ms, tokens_in, tokens_out,
           cost_usd, model, json.dumps(detail) if detail else None))
+
+
+def stage_events(conn: psycopg.Connection, run_id: str) -> list[dict[str, Any]]:
+    """Every stage this run entered, in order, with what it decided."""
+    return fetch_all(conn, """
+        SELECT stage, path_taken, document_id, ms, tokens_in, tokens_out,
+               cost_usd, model, detail, created_at
+        FROM stage_event WHERE run_id = %s ORDER BY created_at, id
+    """, (run_id,))
 
 
 def run_report(conn: psycopg.Connection, run_id: str) -> dict[str, Any]:
@@ -213,6 +222,49 @@ def open_conflict_keys(conn: psycopg.Connection, pile_id: str) -> list[dict[str,
     """, (pile_id,))
 
 
+def conflict_proposal_history(conn: psycopg.Connection,
+                              pile_id: str) -> dict[tuple[str, str], list[dict[str, Any]]]:
+    """Every conflict this pile has already put to a person, and what it said.
+
+    Keyed by (entity_key, field) and carrying the values that were on the
+    proposal, so the gate can tell "this disagreement was already reviewed" from
+    "this disagreement now says something different". Status matters as much as
+    content: a pending item is a question still on someone's desk.
+    """
+    out: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for row in fetch_all(conn, """
+        SELECT payload ->> 'entity_key' AS entity_key,
+               payload ->> 'field'      AS field,
+               payload -> 'values'      AS values,
+               status, created_at
+        FROM proposal
+        WHERE pile_id = %s AND kind = 'conflict'
+        ORDER BY created_at
+    """, (pile_id,)):
+        key = (row["entity_key"], row["field"])
+        out.setdefault(key, []).append(
+            {"status": row["status"], "values": row["values"] or []}
+        )
+    return out
+
+
+def section_proposal_hashes(conn: psycopg.Connection,
+                            pile_id: str) -> set[tuple[str, str]]:
+    """(section_key, content_hash) pairs this pile has already put to a person.
+
+    The counterpart of `conflict_proposal_history` for sections, and it exists
+    for the same reason: a second run must not ask again for content that is
+    already on someone's desk, or re-litigate content they already turned down.
+    Byte-identical is the right comparison because a section's hash *is* its
+    content -- which is what makes this exact rather than a heuristic.
+    """
+    return {(row["section_key"], row["content_hash"]) for row in fetch_all(conn, """
+        SELECT payload ->> 'section_key'  AS section_key,
+               payload ->> 'content_hash' AS content_hash
+        FROM proposal WHERE pile_id = %s AND kind = 'section_patch'
+    """, (pile_id,))}
+
+
 def create_proposal(conn: psycopg.Connection, pile_id: str, run_id: str, kind: str,
                     summary: str, payload: dict, ref_id: str | None = None) -> str:
     row = fetch_one(conn, """
@@ -292,6 +344,20 @@ def commit_approved(conn: psycopg.Connection, pile_id: str, run_id: str,
             section = register.section(payload["section_key"])
             if section is None:
                 continue
+            # What lands must be what was reviewed. The proposal carries the
+            # hash of the bytes the person saw; if the register in hand hashes
+            # differently, something changed between the review and the commit
+            # and writing it would make the approval a lie about content nobody
+            # agreed to. Refusing is the only honest option -- and this is the
+            # check that lets the register be rebuilt from a checkpoint after a
+            # restart instead of having to survive in a process's memory.
+            if payload.get("content_hash") and payload["content_hash"] != section.content_hash:
+                raise ValueError(
+                    f"section {section.key!r} was approved at "
+                    f"{payload['content_hash'][:12]} but now hashes to "
+                    f"{section.content_hash[:12]}; refusing to commit content "
+                    f"that was never reviewed"
+                )
             row = fetch_one(conn, """
                 INSERT INTO section (deliverable_id, section_key, ordinal, body, content_hash)
                 VALUES (%s, %s, %s, %s, %s) RETURNING id

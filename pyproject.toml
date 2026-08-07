@@ -5,6 +5,11 @@ description = "An agentic system that owns a pile of vendor contracts end to end
 requires-python = ">=3.11"
 dependencies = [
     "pydantic>=2.7",
+    # Orchestration and its Postgres checkpointer. Resumability is a property of
+    # the graph rather than bespoke state-machine code -- see PLAN.md section 2
+    # and app/graph/checkpoint.py.
+    "langgraph>=1.0",
+    "langgraph-checkpoint-postgres>=2.0",
     "psycopg[binary]>=3.1",
     "pyyaml>=6.0",
     "fastapi>=0.111",

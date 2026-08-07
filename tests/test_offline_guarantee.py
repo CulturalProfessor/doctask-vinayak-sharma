@@ -48,6 +48,19 @@ def test_the_app_imports_with_no_secrets_in_the_environment(monkeypatch):
         importlib.reload(module)
 
 
+def test_the_orchestrator_does_not_phone_home():
+    """LangGraph brings langsmith with it, and langsmith traces to a hosted
+    service when a flag says so. Off by default is not the same as pinned off,
+    and the difference is a suite that reaches the network on someone else's
+    machine -- with document text in the payload."""
+    import os
+
+    import app.settings  # noqa: F401  -- importing is what sets the default
+
+    assert os.environ["LANGSMITH_TRACING"] == "false"
+    assert os.environ["LANGCHAIN_TRACING_V2"] == "false"
+
+
 def test_the_offline_default_cannot_drift_silently():
     """If this default ever flips to a live provider, every test run starts
     costing money and reaching the network. It is worth pinning."""

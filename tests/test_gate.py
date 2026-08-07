@@ -8,7 +8,7 @@ from __future__ import annotations
 import pytest
 
 from app.domain.config import load_domain
-from app.graph.pipeline import run_understand
+from app.graph import pipeline
 from app.llm.fake import FakeProvider, MissingFixture
 from app.stages import gate as gate_module
 from app.stages.gate import Decision
@@ -27,9 +27,9 @@ def cfg():
 
 
 @pytest.fixture
-def run(conn, pile, cfg):
+def run(pile, cfg):
     try:
-        return run_understand(conn, FakeProvider(), cfg, pile, ACME)
+        return pipeline.run_understand(FakeProvider(), cfg, pile, ACME)
     except MissingFixture as exc:
         pytest.skip(f"fixtures not recorded: {exc}")
 

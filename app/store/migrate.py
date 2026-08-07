@@ -37,6 +37,16 @@ def migrate() -> list[str]:
                 cur.execute("INSERT INTO schema_migration (filename) VALUES (%s)", (path.name,))
             applied.append(path.name)
             print(f"  applied {path.name}")
+
+    # The checkpoint tables are LangGraph's, and it owns their migrations. They
+    # go up here anyway so that a fresh clone reaches a resumable system with
+    # one command rather than two -- behaviour 6 and behaviour 2 have to arrive
+    # together, or the first run after a `docker compose up` is the one that
+    # cannot be resumed.
+    from app.graph.checkpoint import setup_checkpointer
+
+    setup_checkpointer()
+    print("  checkpoint tables up to date")
     return applied
 
 

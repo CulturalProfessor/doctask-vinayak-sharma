@@ -24,6 +24,15 @@ def _load_dotenv(path: Path) -> None:
 
 _load_dotenv(REPO_ROOT / ".env")
 
+# LangGraph pulls in langsmith, which ships a tracer that posts runs to a hosted
+# service when switched on. It is off unless configured, but "off unless
+# configured" is one stray environment variable away from a test suite that
+# quietly reaches the network and a document pile that quietly leaves the
+# machine. Behaviour 7 says the suite runs with no key and no network, so the
+# default is pinned here rather than assumed.
+for _tracing_flag in ("LANGSMITH_TRACING", "LANGCHAIN_TRACING_V2"):
+    os.environ.setdefault(_tracing_flag, "false")
+
 
 def _flag(name: str, default: bool = False) -> bool:
     return os.environ.get(name, str(default)).strip().lower() in {"1", "true", "yes", "on"}
