@@ -34,9 +34,17 @@ produces an honest report of nothing found.
 > `satisfied`, and `not_enough_evidence`. The third is what keeps "nothing found"
 > honest, because a rule nobody could check is not a rule that passed.
 
-**It stays alive.** New documents land in a watched folder. Each arrival produces
-a *targeted update* to the register, not a rewrite and not a re-run that happens
-to reproduce the same bytes. Sections the new document did not affect stay
+**It stays alive.** A new document arrives and produces a *targeted update* to
+the register, not a rewrite and not a re-run that happens to reproduce the same
+bytes.
+
+> **Built differently from this plan.** This said "new documents land in a
+> watched folder", and no watcher was built. Arrival is an operation — `POST
+> /arrivals`, `doctask_document_arrived`, or the UI — and something outside the
+> system calls it. `WATCH_DIR` is still set in `docker-compose.yml` and nothing
+> consumes it. The movement this paragraph describes is real and tested; only
+> its trigger differs, and a plan claiming a component that does not exist is
+> worse than a plan that admits the substitution. Sections the new document did not affect stay
 byte-identical, and the system proves it. Where the new document contradicts what
 the register already says, the conflict is surfaced, never silently resolved.
 
@@ -55,7 +63,7 @@ matters for a three-minute demo video. Everything is fabricated.
 
 ```
                     ┌──────────────┐
-   watched folder → │   INGEST     │ hash, dedupe, format detect
+   corpus / arrival→│   INGEST     │ hash, dedupe, format detect
    REST upload    → └──────┬───────┘
                            ↓
                     ┌──────────────┐  low confidence ──→ escalate to human
@@ -264,6 +272,13 @@ and each one goes in the write-up with its reasoning:
 2. **Vector retrieval degrades to lexical + structured lookup.** If pgvector is
    not earning its latency on a corpus this size, saying so is more honest than
    keeping it for the stack checkbox.
+
+   > **Taken.** The extension is enabled and `span.embedding` exists; nothing
+   > populates or queries it. Exact and fuzzy span matching does the retrieval
+   > job on piles of this size, and semantic search would have added latency for
+   > no measured gain. The column stays so the option is visibly considered
+   > rather than quietly dropped — it is not evidence of a feature. Declared in
+   > the README under "What it does not do".
 3. **Second corpus shrinks** from a full pile to a smaller one — still genuinely
    different documents, so "it works the second time" still holds.
 4. **Localization narrows to two locales** rather than several. The pagination
