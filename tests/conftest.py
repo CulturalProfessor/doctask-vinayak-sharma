@@ -82,13 +82,13 @@ def _test_piles(db_available):
 
 
 @pytest.fixture
-def pile(db_available, _test_piles):
-    """A pile of its own, committed.
+def make_pile(db_available, _test_piles):
+    """Make as many piles as a test needs, each its own.
 
-    Committed because a run reads it on a different connection. Uniquely named
-    because two tests sharing a pile would share its documents, and re-ingesting
-    identical bytes is a deliberate no-op -- the second test would silently get
-    a run with nothing to do, and pass for the wrong reason.
+    Uniquely named because two tests -- or two runs -- sharing a pile would
+    share its documents, and re-ingesting identical bytes is a deliberate no-op.
+    The second run would silently get nothing to do, and a test comparing it
+    against the first would pass for that reason rather than the intended one.
     """
     if not db_available:
         pytest.skip("Postgres not reachable; start it with `docker compose up -d db`")
@@ -98,9 +98,18 @@ def pile(db_available, _test_piles):
     from app.ingest.ingest import ensure_pile
     from app.settings import settings
 
-    name = f"test-pile-{uuid.uuid4().hex[:12]}"
-    with psycopg.connect(settings.database_url, row_factory=dict_row) as setup:
-        pile_id = ensure_pile(setup, name, "vendor_contracts")
-        setup.commit()
-    _test_piles.append(pile_id)
-    return pile_id
+    def _make() -> str:
+        name = f"test-pile-{uuid.uuid4().hex[:12]}"
+        # Committed, because a run reads it on a connection of its own.
+        with psycopg.connect(settings.database_url, row_factory=dict_row) as setup:
+            pile_id = ensure_pile(setup, name, "vendor_contracts")
+            setup.commit()
+        _test_piles.append(pile_id)
+        return pile_id
+
+    return _make
+
+
+@pytest.fixture
+def pile(make_pile) -> str:
+    return make_pile()
