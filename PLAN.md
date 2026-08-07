@@ -91,12 +91,24 @@ Orchestration is **LangGraph with a Postgres checkpointer**, so resumability is 
 property of the graph rather than bespoke state-machine code I have to defend in
 the write-up.
 
-> **Status, 7 Aug: not yet true.** `app/graph/` currently holds hand-rolled
-> sequencing. The four path-changing branches are real and behaviour 1 is
-> satisfied, but there is no checkpointing, so **behaviour 2 is not done**.
-> Stages were deliberately written as pure functions taking explicit arguments
-> so the port is a wrap rather than a rewrite. Decision on how far to go —
-> straight port versus adding a planner node — is deferred; see PROGRESS.md.
+> **Status, 7 Aug: true.** `app/graph/build.py` is the graph above; `interrupt()`
+> is the gate. One graph serves both movements — a full run is a queue of seven
+> documents against an empty pile, an update is a queue of one against a
+> committed register — so there is no second pipeline to keep in agreement.
+>
+> The load-bearing decision was not the framework, it was how the checkpoint
+> relates to the work. They are two writes, and either ordering loses silently:
+> work committed without the checkpoint means a resumed run redoes a node;
+> checkpoint committed without the work means it skips one. So there is one
+> write — the checkpointer shares the run's connection and commits it when it
+> persists the step. LangGraph's default durability is `async`, which is the
+> losing ordering, so runs are driven with `durability="sync"`.
+>
+> Model calls are protected separately, because the node that was in flight when
+> a process dies genuinely does re-run. Every completion is recorded under
+> `(run_id, call_key)` and committed outside the run's transaction, so a resumed
+> run replays its answers rather than buying them twice. See
+> `app/graph/checkpoint.py` and `app/llm/durable.py`.
 
 ### The decisions that change the path
 
@@ -167,7 +179,7 @@ separate.
 | # | Requirement | Mechanism | Proof |
 |---|---|---|---|
 | 1 | Visible stages, some decisions change the path | `stage_event` per node + SSE to the UI; four real branches above | Run log shows branch taken and why |
-| 2 | Survives being stopped | LangGraph Postgres checkpoint after every node | Test: `kill -9` mid-run, restart, no work lost or redone |
+| 2 | Survives being stopped | LangGraph Postgres checkpoint committed in the same transaction as the node's work; model answers recorded per run | Test: two real `SIGKILL`s mid-run — 14 answers bought across both processes, register byte-identical to an uninterrupted run |
 | 3 | A human holds the gate | `proposal` rows + graph `interrupt()`; per-item decisions | Test: reject one finding of three, other two survive |
 | 4 | A machine can drive it | MCP server + REST over identical operations; `approve` is a tool | Test: full run end to end, no browser |
 | 5 | It never bluffs | Claims require ≥1 citation; composer refuses uncited output | Test: clean corpus → honest zero findings |

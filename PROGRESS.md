@@ -486,55 +486,159 @@ refuses to guess.
 
 ---
 
+## 2026-08-07 (later) — the port, and behaviour 2
+
+PLAN.md had committed to LangGraph in four places and the code did not contain
+it. This is the straight port: `StateGraph`, `PostgresSaver`, `interrupt()` at
+the gate. Not one stage changed — they were written as pure functions taking
+explicit arguments so this would be a wrap, and it was.
+
+**The evidence the port changed nothing it understood.** The six section hashes
+of `pile_acme` come out byte-identical to the ones the hand-rolled pipeline
+committed (`f2094b8a`, `d87f2b4f`, `fdfdcea8`, `88ff8462`, `5695b9a8`,
+`fe71da09`) — across a different orchestrator, facts reloaded from the database
+instead of held in memory, and an entity resolver that now runs on both paths.
+
+### The decision that mattered was not the framework
+
+Adopting LangGraph gets you a checkpoint. It does not get you behaviour 2,
+because the checkpoint and the work are two writes and both orderings lose:
+
+| | |
+|---|---|
+| Work committed, checkpoint not | Resume replays the node. Facts twice, stage events twice, the cost report overstates what the pile cost. |
+| Checkpoint committed, work not | Resume skips a node whose output never landed. A register that claims to be complete and is not. |
+
+Both are silent, both report success, and the second is precisely what
+behaviour 5 forbids. So there is exactly one write: the checkpointer shares the
+run's connection and commits it when it persists the step, which puts the
+node's work and the record that the node finished in one Postgres transaction.
+
+**LangGraph's default durability is `async`** — the checkpoint written on a
+background thread while the next step already runs. That is the losing ordering,
+shipped as the default. It also happens to be caught loudly rather than quietly
+here, because two threads cannot share one psycopg connection: the first attempt
+died on `another command is already in progress`. Runs are driven with
+`durability="sync"`.
+
+### The model-call ledger
+
+Checkpointing still leaves the node that was in flight re-running from the top,
+which is correct — a half-run node is not finished work. But re-issuing its
+model call means the run pays twice for one answer, and then the cost report
+lies in the expensive direction.
+
+So `model_call` records every completion under `(run_id, call_key)` and commits
+it **immediately, on its own connection, outside the run's transaction**. The
+ordering is the whole point: keeping a recorded answer through a rollback is
+safe, because the key is the prompt and the same question has the same answer.
+Losing it is what costs money. It is keyed per run, not globally — a fresh run
+genuinely re-asks, because resumption is a promise about one run.
+
+### Two orchestrators became one
+
+The full run and the incremental update were separate code paths, and that is
+how the entity-resolution fix came to live on one and not the other. They are
+now the same graph with different starting conditions. Three things fell out of
+sharing a gate:
+
+- Conflicts are re-proposed when what they **say** changed, not when the arriving
+  document happened to mention the field. The old rule guessed at which
+  conflicts could have moved; this one compares the values.
+- Sections got the same rule, by content hash — which caught a bug the tests
+  found: a second run arriving while the first was still at the gate re-proposed
+  every section already on the reviewer's desk.
+- Commit refuses to write a section whose hash differs from the one that was
+  approved. That is what lets the register be rebuilt from a checkpoint, and it
+  deleted the API's `_REGISTERS` dict, which used to answer `POST /commit` after
+  a restart with *"re-run to recompose it"* — a server telling a caller to redo
+  finished work because the server forgot.
+
+### Proven, by killing a real process
+
+Every test sends a real `SIGKILL` and asserts the child's returncode is `-9`. A
+child that exited cleanly did not test this.
+
+**Killed inside the third extraction**, after its answer was bought and recorded
+but before the node committed:
+
+| | After the kill | After resume |
+|---|---|---|
+| facts | 13 | 48 |
+| classify / extract events | 3 / 2 | 7 / 7 |
+| answers bought | 6 | 14 total, 1 replayed |
+| register | — | byte-identical to a control run |
+
+Five finished calls untouched, the one in flight replayed, the remaining eight
+bought once.
+
+**Killed before the sixth call**, nothing bought yet: 5 in the ledger before, 14
+after. A run redoing completed calls would show a ledger larger than 14.
+
+**Killed at the gate**: a fresh process that has never seen the register commits
+it, and the stored hashes match the ones reviewed.
+
+Also proven: a crash commits no deliverable and no audit row; no stage is
+recorded twice; what the run reports spending equals what it actually bought;
+nine proposals stay nine. Both mechanisms were mutation-checked — disabling the
+ledger fails the replay test, removing the checkpointer commit fails the
+gate-survival test. Worth recording: the commit in `put` is redundant today
+because `put_writes` lands first and carries the node's work with it. It stays
+as defence against LangGraph's ordering changing, not against a live window.
+
+### What this cost elsewhere
+
+Rollback-per-test cannot isolate a run whose whole point is that it commits, so
+piles are unique per test and dropped at the end of the session. `understand.py`
+and `incremental.py` are gone, and `test_reconcile_compose.py` now needs the
+database — a second, database-free orchestrator kept for test convenience is
+exactly how the identity fix went missing from one path.
+
+Also pinned `LANGSMITH_TRACING=false`. LangGraph brings langsmith, which traces
+to a hosted service when a flag says so. Off by default is one stray environment
+variable away from a suite that reaches the network with document text in the
+payload, and behaviour 7 deserves better than an assumption.
+
+---
+
 ## PICK UP HERE
-
-### Open decision — orchestration framework
-
-PLAN.md commits to LangGraph in four places. It is **not in the code**: no
-dependency, no checkpointing, and `app/graph/` holds hand-rolled sequencing.
-PLAN.md now says so rather than implying otherwise.
-
-What exists is a fixed stage sequence with four genuine path-changing branches —
-retry-then-skip on malformed extraction, escalate on low classification
-confidence, quarantine on injection, escalate on ambiguous entity. That
-satisfies behaviour 1 as written ("a retry, a skip, an escalation to a person").
-It does **not** satisfy behaviour 2, which is one of the five uncuttable.
-
-Stages are pure functions taking explicit arguments, written that way on purpose
-so the port is a wrap and not a rewrite.
-
-Three options, undecided:
-
-1. **Straight LangGraph port** (recommended) — `StateGraph` + `PostgresSaver` +
-   `interrupt()` at the gate. Behaviour 2 becomes a framework property, the
-   stack matches theirs, branches stay as they are. Roughly half a day.
-2. **Add a planner node** — a supervisor decides which stages to run per
-   document rather than following a fixed order. More genuinely agentic and
-   stronger against "a fixed script with labels", but a day or more and new
-   failure modes to test.
-3. **Stay hand-rolled and defend it** — the brief explicitly permits a
-   hand-rolled loop; checkpointing would go on the `run`/`stage_event` tables
-   that already exist. Costs write-up space defending a divergence from their
-   working stack.
-
-Note for whichever is chosen: LangGraph checkpointing is per-thread, so the
-section-level locking behaviour 9 needs lives in our schema either way.
-
-### Remaining, in order
-
-1. Orchestration decision above → behaviour 2.
-2. Concurrency test → behaviour 9 (advisory locks are already in
-   `store/engine.py`, unused so far).
-3. MCP server → completes behaviour 4 in the shape the brief calls strongest.
-4. The examine stage against `rules/playbook.yaml` — the second movement.
-   Nothing consumes the playbook yet.
-5. React review UI (degradable to a minimal table; first item on the cut list).
-6. Second corpus `pile_northwind` — currently empty; seeding skips it gracefully.
-7. Tasks 2, 3, 4.
 
 ### State as of 2026-08-07
 
-19 commits, 194 tests green offline, $0.00 spent. Behaviours 1, 3, 5, 6, 7, 8, 10
-done; 4 partial (HTTP yes, MCP no); 2 and 9 not started. Ahead of the PLAN.md
-schedule — that put "understand end to end" on 9–10 Aug and the gate on 13–14.
+22 commits, 205 tests green offline, $0.00 spent. Behaviours 1, 2, 3, 5, 6, 7, 8,
+10 done; 4 partial (HTTP yes, MCP no); 9 not started. The orchestration decision
+is settled: straight LangGraph port, done, and the reasoning that mattered is in
+the entry above.
 
+### Remaining, in order
+
+1. **Behaviour 9 — concurrency.** Two runs at once on the same pile stay two
+   runs. `advisory_lock` exists in `store/engine.py` and is still unused. One
+   thing already known: it uses `pg_advisory_xact_lock`, which is
+   transaction-scoped, and a run's transaction now closes at every checkpoint —
+   so the lock a run needs is the session-scoped `pg_advisory_lock`, taken on
+   the connection the run owns for its whole life. LangGraph's checkpointing is
+   per-thread and does not help here; the contention is at the section level and
+   the lock lives in our schema, as PLAN.md §6 predicted.
+2. **MCP server** → completes behaviour 4 in the shape the brief calls
+   strongest. Every operation already exists in `app/api/runs.py`, including
+   `resume`, so this is a second surface over the same calls rather than new
+   behaviour.
+3. **The EXAMINE stage** against `rules/playbook.yaml` — the second of the three
+   movements and the largest untouched gap. Nothing consumes the playbook yet.
+   It slots in as a node between `compose` and `delta`, and its findings become
+   proposals like everything else.
+4. React review UI (degradable to a minimal table; first item on the cut list).
+5. Second corpus `pile_northwind` — currently empty; seeding skips it gracefully.
+6. Tasks 2, 3, 4.
+
+### Notes for whoever picks this up
+
+- The graph is `app/graph/build.py`; read `checkpoint.py` and `state.py` first,
+  they carry the two decisions everything else follows from.
+- Nodes never call `commit()`. If a new node does, it has broken behaviour 2.
+- A node may run twice. Anything a node writes must be safe to write again, or
+  it belongs before the interrupt rather than after it — which is why `gate`
+  writes nothing and `propose` exists separately.
+- State is plain JSON on purpose. If something needs a custom serialiser to
+  cross a node boundary, load it from the database instead.
