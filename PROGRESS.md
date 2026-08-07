@@ -766,24 +766,158 @@ citations and character offsets on every violation.
 
 ---
 
+## The review UI, and the four things it found
+
+Vite + React under `web/`, built in a node stage and copied into the Python
+image, served at `/review/` from the same origin as the API. Cut-list item 1,
+now built.
+
+### It is a client, not a surface
+
+`web/src/api.js` maps one-to-one onto the endpoints in `app/api/runs.py`. There
+is no UI-only endpoint and no server-rendered view. That is what makes behaviour
+4 structural rather than claimed: the browser cannot commit anything a script
+could not, and cannot skip the gate. `test_the_surfaces_share_one_implementation`
+already fails if a surface grows a decision of its own, and the UI was built to
+stay inside that.
+
+The consequence people ask about: **an approval clicked in the browser is
+recorded as `decided_via = 'http'`, not `'ui'`.** The server cannot tell a
+browser from `curl` — both are an HTTP POST with a JSON body. Writing `'ui'`
+would be the unfalsifiable claim the column exists to prevent. `003_decided_via`
+lists `'ui'` as a possible value; it is not one, and the comment is wrong.
+
+### Design rules, and what they ruled out
+
+**Show the evidence next to the decision.** A reviewer asked to approve
+`hourly_rate: 2 distinct values` is not reviewing anything. The proposal card
+shows USD 120 quoted from `invoice_1043.txt` at [484–491] beside USD 135 from
+`amendment_01.md` at [277–321], with the rationale and the line saying nothing
+has been resolved.
+
+**No "approve all".** A control whose only purpose is to clear thirteen items
+without reading them would quietly undo behaviour 3. Commit stays disabled while
+anything is pending and puts the server's own sentence in its tooltip.
+
+**One review, one request.** Verdicts are collected locally and sent as a single
+`POST /decide` with mixed approvals and rejections. Per-item requests would leave
+a half-reviewed run behind on any failure.
+
+**Never show a number the screen was not given.** A run opened from the runs list
+shows its status and nothing else — no document count, no fact count — because
+this screen was not told those. Showing `0` there would be a made-up number in
+the one place a reviewer looks to see how much the system read.
+
+### Five bugs, found by driving it rather than reading it
+
+**1. Thirteen clicks recorded one decision.** `setVerdicts({...verdicts, [id]:
+v})` reads a stale closure: two verdicts set before React re-renders both read
+the same `verdicts`, and the second overwrites the first. A reviewer clicking
+quickly down the list would submit one decision believing they had submitted
+thirteen — and the gate would still be holding twelve items with nothing saying
+so. Fixed with the functional updater everywhere state derives from state.
+
+Only visible because the page was driven. Reading the code, it looks right.
+
+**2. A pile with seven read documents reported "0 docs, 7 not read".**
+`list_piles` counted a document as read only if `status = 'ingested'`, and called
+everything else a gap. But `classified` and `extracted` are states a document
+reaches *by being understood*. So pipeline progress was counted as damage, and
+the register composed from those documents' facts sat there beside the claim
+that none of them had been read. Nothing failed; the number was simply a lie, in
+the place a reviewer looks first.
+
+Fixed by naming the statuses that actually mean not-read — `GAP_STATUSES =
+('quarantined', 'unsupported')` — and by answering the question once, on the
+server, as `is_gap` on each document row. The UI had the identical bug in its own
+copy of the test, which is the argument for one answer rather than three.
+
+**3. A browser refresh stranded the review.** The only handle on a run stopped at
+the gate was a variable in the tab. Reload, and thirteen proposals sat in the
+database with nothing able to name the run holding them. Behaviour 2 says a
+stopped run can be picked back up; a UI that lost the run id on reload was not
+honouring that. Added `list_runs(pile_id, status=None)` — an operation, so it is
+on HTTP *and* MCP, and the parity test made that mandatory rather than optional.
+An agent that lost its run id now has the same way back that a person does.
+
+**4. The MCP stdio test was a race, and the earlier fix hid it.** It wrote three
+messages with `subprocess.run(input=...)`, which closes stdin immediately — so it
+raced the server's own shutdown-on-EOF. It won on an idle machine and lost under
+a full suite. The previous fix raised the timeout to 180s, which treated a race
+as slowness and left it flaky. Now the pipe is held open until the reply arrives,
+as a real client would, with a watchdog so a genuinely hung server still fails
+instead of hanging the suite. Reproduced outside pytest first, so the fix is
+aimed at the cause.
+
+**5. On a fresh clone, the demo pile produced an empty register and called it a
+success.** The worst one, and it had been there the whole time — invisible
+because every test starts from an empty pile and the UI was the first thing to
+start from the seeded one.
+
+`docker compose up` seeds `acme` by ingesting its bytes. `ingest` then skipped
+all seven documents as duplicates, queued none of them, extracted nothing, and
+composed six sections with **0 citations and 15 gaps** — while reporting "7
+documents" and opening the gate as though it had worked. So the very first thing
+a reviewer saw on a fresh clone was an empty register behind a successful run.
+
+The cause is one confused sentence: *already stored* was treated as *already
+understood*. They are different claims, and the content hash only ever
+established the first. Fixed by keying the queue on whether anything has read
+the document (`status = 'ingested'` means nothing has) rather than on whether
+its bytes were new to this run — which also keeps a re-sent document a no-op,
+because a classified or quarantined document has been decided about.
+
+The register was at least honest about being empty; the run was not honest about
+why. Two tests now pin both directions, and the first one fails against the old
+code.
+
+### The path that stays honest
+
+Driven end to end in a browser, twice: once on a pile created through the UI, and
+once on the seeded `acme` pile after `docker compose down -v` and a `--no-cache`
+image build, which is the fresh-clone path behaviour 6 has to keep working now
+that a node stage is in it. Both reach the same six hashes.
+
+Read the pile →
+13 proposals → 12 approved and `hourly_rate` rejected in one request → commit →
+version 1, six sections, hashes `f2094b8a d87f2b4f fdfdcea8 88ff8462 5695b9a8
+fe71da09`, byte-identical to every earlier run of this corpus. Then the
+amendment arrives → 7 proposals, `billing` untouched → commit → version 2, four
+written and two carried at their old hashes. Then the same bytes again → 0 model
+calls, `no_change`, and all six sections reported unchanged *because they were
+recomposed and hashed*, which the screen says in those words.
+
+---
+
 ## PICK UP HERE
 
 ### State as of 2026-08-07
 
-25 commits, 239 tests green offline, $0.00 spent. **Behaviours 1–10 all done**,
-and **all three movements exist** — understand, examine, stay alive. Verified
-against `docker compose up`, not only in the suite.
+26 commits, 245 tests green offline, $0.00 spent. **Behaviours 1–10 all done**,
+**all three movements exist** — understand, examine, stay alive — and there are
+**three working surfaces** over one operations layer: HTTP, MCP, and a review UI
+at `/review/`. Verified against `docker compose up` from a cold, volume-less
+start, not only in the suite.
 
 ### Remaining, in order
 
-1. **React review UI** — first item on the declared cut list, and degradable to
-   a minimal table. Every operation it needs is already in `app/operations.py`;
-   it is a client of that, never a privileged path.
-2. **Second corpus `pile_northwind`** — currently empty; seeding skips it
-   gracefully. Genuinely different documents, so "it works the second time"
-   holds. The register and the playbook should both come out different.
+1. **Second corpus `pile_northwind`** — currently empty; seeding skips it
+   gracefully and the README now says so instead of claiming two corpora ship.
+   Genuinely different documents, so "it works the second time" holds. The
+   register and the playbook should both come out different.
+2. **README** — still has TODO sections (architecture, the calls I made, what it
+   does not do). The false claims are gone; the missing ones are not written.
 3. **Tasks 2, 3, 4** — the SuperDocs build (separate repo), the use-case list,
    and the demo video plus write-up.
+
+### Two gaps still open, and they are decisions rather than work
+
+- **No folder watcher.** `WATCH_DIR` is set in `docker-compose.yml` and nothing
+  consumes it. PLAN.md claims one. Either build it or stop claiming it; leaving
+  both is the only unacceptable option.
+- **pgvector is unused.** The embedding column exists and nothing populates or
+  queries it. This is cut-list item 2 already taken in practice — it should be
+  declared cut rather than left looking like an oversight.
 
 ### Worth putting in the write-up
 

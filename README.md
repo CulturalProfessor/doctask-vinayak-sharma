@@ -10,9 +10,10 @@ conflict, finding and update before it commits.
 
 Built for the SuperDocs Round 2 engineering task.
 
-> Status: foundation. Ingest, storage and the HTTP surface work end to end. The
-> stages that classify, extract, reconcile, examine and gate are not built yet,
-> and this file will not claim they are. Sections marked TODO are not yet true.
+> Status: all three movements work end to end — understand, the human gate, the
+> incremental update — over HTTP, over MCP, and in a browser. Sections marked
+> TODO below are documentation that is not written yet, not features being
+> claimed early.
 
 ## Run it
 
@@ -21,10 +22,23 @@ docker compose up
 ```
 
 That is the whole setup from a fresh clone: it brings up Postgres with pgvector,
-applies migrations, seeds the demo pile, and serves the API on
-<http://localhost:8010>. Ports are 5434 and 8010 rather than the usual 5432 and
-8000, because both of those are commonly already taken on a dev box; override
-with `DB_PORT` and `API_PORT`.
+applies migrations, builds the review UI, seeds the demo pile, and serves
+everything on <http://localhost:8010>. Ports are 5434 and 8010 rather than the
+usual 5432 and 8000, because both of those are commonly already taken on a dev
+box; override with `DB_PORT` and `API_PORT`.
+
+Three ways in, over one set of operations:
+
+| | |
+|---|---|
+| **Review UI** | <http://localhost:8010/review/> |
+| **HTTP API** | <http://localhost:8010/docs> |
+| **MCP** | `python -m app.mcp.server` (stdio) |
+
+None of them is privileged. The UI cannot commit anything a script could not,
+and cannot skip the gate — every one of them calls the same functions in
+`app/operations.py`, and there are tests that fail if a surface grows a decision
+of its own.
 
 ```bash
 curl localhost:8010/health
@@ -51,11 +65,14 @@ citations are honest at page granularity — PDF text extraction does not give
 reliable offsets back into the original layout, and pretending otherwise would
 make every PDF citation quietly wrong.
 
-Two full corpora ship, with different counterparties and different conflict
-profiles, so the second run is genuinely a second set of documents:
+One full corpus ships today:
 
-- `corpora/pile_acme/`
-- `corpora/pile_northwind/`
+- `corpora/pile_acme/` — seven documents, three real conflicts, four rule
+  violations.
+- `corpora/pile_northwind/` — **empty.** A second corpus with different
+  counterparties and a different conflict profile is planned and not written;
+  seeding skips it rather than pretending. Until it exists, "it works on a
+  second pile" is not a claim this repo gets to make.
 
 Every document is fabricated. No real vendor, client or employer material.
 
@@ -80,11 +97,14 @@ docker compose up -d db
 .venv/bin/python -m pytest
 ```
 
-35 tests, all green. Runs with no API key and no network — `LLM_PROVIDER=fake` uses a deterministic
-recorded provider. The tests that matter target behaviours, not mocks: a run
-killed and resumed, two runs at once, a document that tries to give orders, a
-re-ingest of identical bytes that changes nothing, and a clean corpus that
-honestly reports no findings.
+245 tests, all green. Runs with no API key and no network — `LLM_PROVIDER=fake`
+uses a deterministic recorded provider, and there is a test that fails if
+anything in the suite reaches the network. The tests that matter target
+behaviours, not mocks: a run killed with `SIGKILL` mid-extraction and resumed,
+two runs racing for one pile, a document that tries to give orders, a re-ingest
+of identical bytes that changes nothing, a clean corpus that honestly reports no
+findings, and a full pile driven from empty to committed register over MCP with
+no HTTP and no browser.
 
 ## Security note
 
