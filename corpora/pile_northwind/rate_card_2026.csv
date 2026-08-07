@@ -1,0 +1,6 @@
+service_code,description,unit,rate_usd,effective_from
+DRY-STD,Drayage standard,hour,110.00,2026-08-01
+DRY-EXP,Drayage expedited,hour,145.00,2026-08-01
+CHS-PD,Chassis per diem,day,45.00,2026-01-01
+CNG-FEE,Port congestion fee,event,at cost,2026-01-01
+DEM-STD,Demurrage,container-day,295.00,2026-01-01

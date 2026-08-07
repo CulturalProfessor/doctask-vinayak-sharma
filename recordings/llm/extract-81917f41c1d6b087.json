@@ -1,0 +1,11 @@
+{
+  "purpose": "extract",
+  "prompt_preview": "Document type: msa\nFilename: msa_harbourline_2026.md\n\nFields to extract:\n  counterparty (text) [required] -- The vendor or supplier the agreement is with, as written.\n  effective_date (date) -- The date the agreement takes effect.\n  term_months (number) [unit: months] -- The length of the initial term in months.\n  hourly_rate (money) -- The standard hourly rate for services, with its currency.\n  payment_terms_days (number) [unit: days] -- How many days after receipt an invoice is payable.\n  term",
+  "text": "{\"fields\": {\"counterparty\": {\"value\": \"Harbourline Freight Systems LLC\", \"quote\": \"Supplier: Harbourline Freight Systems LLC\", \"confidence\": 0.99}, \"effective_date\": {\"value\": \"1 January 2026\", \"quote\": \"Effective 1 January 2026.\", \"confidence\": 0.99}, \"term_months\": {\"value\": \"12\", \"quote\": \"The initial term runs for twelve (12) months from the effective date.\", \"confidence\": 0.99}, \"hourly_rate\": {\"value\": \"USD 95 per hour\", \"quote\": \"Chargeable work is billed at USD 95 per hour.\", \"confidence\": 0.99}, \"payment_terms_days\": {\"value\": \"45\", \"quote\": \"Client shall settle each invoice within forty-five (45) days of receipt.\", \"confidence\": 0.99}, \"termination_notice_days\": {\"value\": \"90\", \"quote\": \"Either party may terminate this Agreement, or give notice that it will not renew, on ninety (90) days written notice to the other party.\", \"confidence\": 0.99}, \"auto_renews\": {\"value\": \"The Agreement renews for successive twelve-month terms unless either party serves notice under Article VII.\", \"quote\": \"The Agreement renews for successive twelve-month terms unless either party serves notice under Article VII.\", \"confidence\": 0.99}}}",
+  "usage": {
+    "tokens_in": 1023,
+    "tokens_out": 1123,
+    "cost_usd": 0.0,
+    "model": "nvidia/nemotron-3-ultra-550b-a55b:free"
+  }
+}

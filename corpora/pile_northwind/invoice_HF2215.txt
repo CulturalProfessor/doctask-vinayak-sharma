@@ -1,0 +1,27 @@
+HARBOURLINE FREIGHT SYSTEMS LLC
+Pier 14, Marine Terminal Road, Bayonne, NJ 07002
+EIN 41-2288301
+
+TAX INVOICE  HF-2215  (FINAL)
+
+Issued:           15 February 2027
+Customer:         Northwind Logistics Group PLC
+Against:          SOW-221 / MSA dated 1 January 2026
+Period covered:   1 December 2026 to 31 December 2026
+
+Final invoice for services under SOW-221. Issued late owing to the December
+port closure and the reconciliation of pass-through charges.
+
+  Line  Description                          Qty      Unit        Net
+  ----  -----------------------------------  -----  --------  ----------
+  1     Drayage and container handling       160 h   USD 110  USD 17,600
+  ----  -----------------------------------  -----  --------  ----------
+                                              Invoice total   USD 17,600
+
+  Pass-through (billed at cost, not chargeable hours):
+  2     Port congestion fee, weeks 50-52                      USD  1,140
+
+                                              Amount payable  USD 18,740
+
+Terms: payment due 45 days from receipt.
+Remittance: Harbourline Freight Systems LLC, account ending 8802.

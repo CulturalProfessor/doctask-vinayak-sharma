@@ -1,0 +1,11 @@
+{
+  "purpose": "extract",
+  "prompt_preview": "Document type: sow\nFilename: sow_221.html\n\nFields to extract:\n  counterparty (text) [required] -- The vendor performing the work.\n  sow_number (text) -- The statement of work's identifier.\n  start_date (date) -- The date work begins.\n  end_date (date) -- The date work is scheduled to complete.\n  hours_cap (number) [unit: hours] -- The maximum billable hours authorised, if capped.\n  hourly_rate (money) -- The rate stated for this engagement, if the SOW restates one.\n  total_value (money) -- The t",
+  "text": "{\n  \"fields\": {\n    \"counterparty\": {\n      \"value\": \"Harbourline Freight Systems LLC\",\n      \"quote\": \"Issued under the Master Services Agreement dated 1 January 2026 between Northwind Logistics Group PLC and Harbourline Freight Systems LLC.\",\n      \"confidence\": 1.0\n    },\n    \"sow_number\": {\n      \"value\": \"SOW-221\",\n      \"quote\": \"Statement of Work SOW-221\",\n      \"confidence\": 1.0\n    },\n    \"start_date\": {\n      \"value\": \"1 February 2026\",\n      \"quote\": \"Services run from 1 February 2026 to 31 December 2026.\",\n      \"confidence\": 1.0\n    },\n    \"end_date\": {\n      \"value\": \"31 December 2026\",\n      \"quote\": \"Services run from 1 February 2026 to 31 December 2026.\",\n      \"confidence\": 1.0\n    },\n    \"hours_cap\": {\n      \"value\": 600,\n      \"quote\": \"Supplier may bill up to six hundred (600) hours against this Statement of Work.\",\n      \"confidence\": 1.0\n    },\n    \"total_value\": {\n      \"value\": \"USD 57,000\",\n      \"quote\": \"The total value of this Statement of Work is USD 57,000.\",\n      \"confidence\": 1.0\n    }\n  }\n}",
+  "usage": {
+    "tokens_in": 772,
+    "tokens_out": 1319,
+    "cost_usd": 0.0,
+    "model": "nvidia/nemotron-3-ultra-550b-a55b:free"
+  }
+}

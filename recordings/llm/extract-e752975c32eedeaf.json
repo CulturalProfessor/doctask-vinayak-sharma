@@ -1,0 +1,11 @@
+{
+  "purpose": "extract",
+  "prompt_preview": "Document type: invoice\nFilename: invoice_HF2208.txt\n\nFields to extract:\n  counterparty (text) [required] -- The vendor issuing the invoice.\n  invoice_number (text) -- The invoice number as printed.\n  invoice_date (date) -- The date the invoice was issued.\n  service_period (text) -- The period of service the invoice covers.\n  hourly_rate (money) -- The hourly rate actually billed on this invoice.\n  hours_billed (number) [unit: hours] -- The total number of hours billed.\n  amount_due (money) -- Th",
+  "text": "{\"fields\": {\"counterparty\": {\"value\": \"HARBOURLINE FREIGHT SYSTEMS LLC\", \"quote\": \"HARBOURLINE FREIGHT SYSTEMS LLC\", \"confidence\": 1.0}, \"invoice_number\": {\"value\": \"HF-2208\", \"quote\": \"HF-2208\", \"confidence\": 1.0}, \"invoice_date\": {\"value\": \"6 October 2026\", \"quote\": \"6 October 2026\", \"confidence\": 1.0}, \"service_period\": {\"value\": \"1 September 2026 to 30 September 2026\", \"quote\": \"1 September 2026 to 30 September 2026\", \"confidence\": 1.0}, \"hourly_rate\": {\"value\": \"USD 110\", \"quote\": \"USD 110\", \"confidence\": 1.0}, \"hours_billed\": {\"value\": \"200\", \"quote\": \"200 h\", \"confidence\": 1.0}, \"amount_due\": {\"value\": \"USD 22,885\", \"quote\": \"USD 22,885\", \"confidence\": 1.0}, \"payment_terms_days\": {\"value\": \"45\", \"quote\": \"45 days from receipt\", \"confidence\": 1.0}}}",
+  "usage": {
+    "tokens_in": 804,
+    "tokens_out": 987,
+    "cost_usd": 0.0,
+    "model": "nvidia/nemotron-3-ultra-550b-a55b:free"
+  }
+}

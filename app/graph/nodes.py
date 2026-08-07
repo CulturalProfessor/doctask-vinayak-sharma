@@ -508,8 +508,36 @@ class Nodes:
         return extract_pages(data, detect_format(path, data))[0].text
 
     def _gaps(self, state: RunState) -> list[tuple[str, Gap]]:
-        return [(row["document"], Gap(row["field_name"], row["reason"], row["detail"]))
+        """Everything the register could not establish, from both directions.
+
+        A field a document was asked for and did not answer is one kind of gap,
+        and extraction reports those. A whole document that never became input
+        is the other kind, and nothing reported those at all: the register's
+        "What Could Not Be Established" section listed missing fields while
+        staying silent about a document sitting in the pile that was refused or
+        quarantined. A reviewer reading the deliverable had no way to learn a
+        ninth document existed.
+
+        Found by the second corpus, which is the argument for having one --
+        pile_acme contains no quarantined and no unsupported document, so this
+        section was never asked the question.
+        """
+        rows = [(row["document"], Gap(row["field_name"], row["reason"], row["detail"]))
                 for row in state.get("gaps", [])]
+
+        for document in repo.documents_for_pile(self.conn, state["pile_id"]):
+            reason = _NEVER_INPUT.get(document["status"])
+            if not reason:
+                continue
+            note = (document["ingest_note"] or "").strip()
+            rows.append((document["filename"], Gap(
+                "(whole document)", reason,
+                # The full text lives on the finding, which is where a reviewer
+                # reads the evidence. Here it is a pointer, and an unbounded
+                # note would stretch the table past reading width.
+                (note[:117] + "…") if len(note) > 118 else (note or None),
+            )))
+        return rows
 
     @staticmethod
     def _gap_row(document: str, gap: Gap) -> dict[str, Any]:
@@ -580,6 +608,18 @@ class Nodes:
                 for m in conflict.members
             ],
         }
+
+
+# Document statuses that mean the document is in the pile but was not part of
+# what the register was built from. Each one belongs in the gaps section, said
+# in the words a reviewer needs rather than as a status code.
+_NEVER_INPUT = {
+    "quarantined": "quarantined for containing instructions aimed at the "
+                   "system; never used as input",
+    "unsupported": "the format is not supported, so the document was never read",
+    "escalated": "classification or identity was escalated to a person; not "
+                 "extracted",
+}
 
 
 def _finding_row(finding: Finding) -> dict[str, Any]:

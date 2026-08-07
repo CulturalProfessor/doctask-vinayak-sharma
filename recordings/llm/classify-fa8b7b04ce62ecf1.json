@@ -1,0 +1,11 @@
+{
+  "purpose": "classify",
+  "prompt_preview": "Taxonomy:\n  msa: Master Services Agreement -- often contains: master services agreement; this agreement is entered into; governing terms between the parties\n  amendment: Amendment -- often contains: amendment no; amends the master services agreement; all other terms remain in full force\n  sow: Statement of Work -- often contains: statement of work; scope of services; deliverables and milestones\n  invoice: Invoice -- often contains: invoice number; amount due; remit payment to\n  notice: Renewal o",
+  "text": "{\"doc_type\": \"amendment\", \"confidence\": 0.99, \"reasoning\": \"The document is explicitly titled 'AMENDMENT NO. 1' and references the Master Services Agreement dated 1 January 2026. It amends Article III (charges) while stating other terms remain unchanged, and includes standard continuation language ('Save as amended above, the Agreement continues in full force and effect'). This matches the amendment taxonomy.\", \"contains_instructions_to_the_reader\": false}",
+  "usage": {
+    "tokens_in": 646,
+    "tokens_out": 312,
+    "cost_usd": 0.0,
+    "model": "nvidia/nemotron-3-ultra-550b-a55b:free"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "purpose": "classify",
+  "prompt_preview": "Taxonomy:\n  msa: Master Services Agreement -- often contains: master services agreement; this agreement is entered into; governing terms between the parties\n  amendment: Amendment -- often contains: amendment no; amends the master services agreement; all other terms remain in full force\n  sow: Statement of Work -- often contains: statement of work; scope of services; deliverables and milestones\n  invoice: Invoice -- often contains: invoice number; amount due; remit payment to\n  notice: Renewal o",
+  "text": "{\"doc_type\": \"notice\", \"confidence\": 0.99, \"reasoning\": \"The document is explicitly titled 'NOTICE OF NON-RENEWAL' and references a Master Services Agreement, stating the sender will not renew beyond the initial term. It includes typical notice elements: expiration date, continuation of services under a specific SOW, final invoicing instructions, and requests for return of records. This aligns perfectly with the 'notice' taxonomy category for renewal or termination notices.\", \"contains_instructions_to_the_reader\": false}",
+  "usage": {
+    "tokens_in": 619,
+    "tokens_out": 408,
+    "cost_usd": 0.0,
+    "model": "nvidia/nemotron-3-ultra-550b-a55b:free"
+  }
+}

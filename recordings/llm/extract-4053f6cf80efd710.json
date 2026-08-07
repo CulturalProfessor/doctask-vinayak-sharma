@@ -1,0 +1,11 @@
+{
+  "purpose": "extract",
+  "prompt_preview": "Document type: amendment\nFilename: amendment_01_harbourline.md\n\nFields to extract:\n  counterparty (text) [required] -- The vendor the amended agreement is with.\n  amendment_number (number) -- The amendment's sequence number.\n  effective_date (date) -- The date this amendment takes effect.\n  hourly_rate (money) -- The revised hourly rate, if the amendment changes it.\n  payment_terms_days (number) [unit: days] -- Revised payment terms in days, if changed.\n  termination_notice_days (number) [unit: ",
+  "text": "{\"fields\": {\"counterparty\": {\"value\": \"Harbourline Freight Systems LLC\", \"quote\": \"Harbourline Freight Systems LLC\", \"confidence\": 0.95}, \"amendment_number\": {\"value\": \"1\", \"quote\": \"AMENDMENT NO. 1\", \"confidence\": 0.95}, \"effective_date\": {\"value\": \"2026-08-01\", \"quote\": \"Effective 1 August 2026.\", \"confidence\": 0.95}, \"hourly_rate\": {\"value\": \"USD 110 per hour\", \"quote\": \"USD 110 per hour\", \"confidence\": 0.95}}}",
+  "usage": {
+    "tokens_in": 766,
+    "tokens_out": 969,
+    "cost_usd": 0.0,
+    "model": "nvidia/nemotron-3-ultra-550b-a55b:free"
+  }
+}
