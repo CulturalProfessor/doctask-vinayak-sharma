@@ -983,8 +983,12 @@ costs nothing because it never reaches a stage.
 
 ### State as of 2026-08-07
 
-33 commits (this one included — the count has been wrong twice by being written
-before the commit that carries it), 252 tests green offline, $0.00 spent.
+252 tests green offline, $0.00 spent. (The commit count used to live here. It
+was wrong three times, always for the same reason — written before the commit
+that carried it — so it is `git rev-list --count HEAD` now and not a number kept
+by hand. A fact that has to be manually synchronised with a fact the tool
+already knows will drift; that is worth a line here because the same reasoning
+is why the register recomputes hashes instead of tracking what changed.)
 **Behaviours 1–10 all done**, **all three movements exist** — understand,
 examine, stay alive — **three working surfaces** over one operations layer
 (HTTP, MCP, and a review UI at `/review/`), and **two corpora that produce
