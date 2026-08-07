@@ -228,7 +228,10 @@ def test_the_server_speaks_the_protocol_over_stdio():
 
     process = subprocess.run(
         [sys.executable, "-m", "app.mcp.server"], input=handshake,
-        cwd=REPO_ROOT, capture_output=True, text=True, timeout=60,
+        # Generous: this competes with the rest of the suite for the machine,
+        # and a timeout here would be a fact about load rather than about the
+        # server.
+        cwd=REPO_ROOT, capture_output=True, text=True, timeout=180,
     )
     replies = [json.loads(line) for line in process.stdout.splitlines() if line.strip()]
     initialise = next(r for r in replies if r.get("id") == 1)

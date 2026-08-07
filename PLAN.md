@@ -27,6 +27,13 @@ you care about. It checks the sources and the register against those rules in
 stages and produces findings, each pointing at where it came from. A clean pile
 produces an honest report of nothing found.
 
+> **Status, 7 Aug: true.** `app/stages/examine.py`. Rules are arithmetic over
+> the extracted facts rather than model judgements, because a finding a reviewer
+> can check beats one they have to trust — and it costs nothing on a stage that
+> runs on every arrival. Each rule has **three** outcomes: `violated`,
+> `satisfied`, and `not_enough_evidence`. The third is what keeps "nothing found"
+> honest, because a rule nobody could check is not a rule that passed.
+
 **It stays alive.** New documents land in a watched folder. Each arrival produces
 a *targeted update* to the register, not a rewrite and not a re-run that happens
 to reproduce the same bytes. Sections the new document did not affect stay
@@ -72,9 +79,9 @@ matters for a three-minute demo video. Everything is fabricated.
      ┌──────────────┬──────┴───────┐
      ↓              ↓              ↓
 ┌─────────┐   ┌──────────┐   ┌──────────┐
-│ COMPOSE │   │ EXAMINE  │   │  IMPACT  │  (incremental runs only)
-│ register│   │ rules →  │   │ which    │
-│ sections│   │ findings │   │ sections │
+│ COMPOSE │ → │ EXAMINE  │ → │  DELTA   │
+│ register│   │ playbook │   │ which    │
+│ sections│   │→ findings│   │ sections │
 └────┬────┘   └────┬─────┘   └────┬─────┘
      └─────────────┴──────────────┘
                    ↓
@@ -182,7 +189,7 @@ separate.
 | 2 | Survives being stopped | LangGraph Postgres checkpoint committed in the same transaction as the node's work; model answers recorded per run | Test: two real `SIGKILL`s mid-run — 14 answers bought across both processes, register byte-identical to an uninterrupted run |
 | 3 | A human holds the gate | `proposal` rows + graph `interrupt()`; per-item decisions | Test: reject one finding of three, other two survive |
 | 4 | A machine can drive it | MCP server + REST as thin surfaces over one `app/operations.py`; `decide` is a tool | Test: a pile driven from empty to committed register through MCP alone, mixed approve/reject in one review; a test asserts neither surface reaches past `operations` |
-| 5 | It never bluffs | Claims require ≥1 citation; composer refuses uncited output | Test: clean corpus → honest zero findings |
+| 5 | It never bluffs | Claims require ≥1 citation; composer refuses uncited output; a playbook rule has three outcomes, so "could not be checked" is never reported as "passed" | Test: clean corpus → honest zero findings, and a pile with no facts says no rule could be judged rather than no violations |
 | 6 | A stranger can run it | `docker compose up`, seeded | Fresh-clone rehearsal on day 11 |
 | 7 | Real tests, no live key | `LLM_PROVIDER=fake`, deterministic recorded provider | Whole suite green offline |
 | 8 | Takes no orders from documents | Quarantine branch | Poisoned fixture in the suite |
@@ -200,7 +207,7 @@ config/domains/vendor_contracts/
   extraction/*.yaml       per-type field schemas
   normalization.yaml      currency, date, unit handling
   reconciliation.yaml     entity keys, precedence, numeric tolerance
-  rules/playbook.yaml     the checklist
+  rules/playbook.yaml     the checklist, each rule naming a check kind
   register.yaml           deliverable shape
 ```
 

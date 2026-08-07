@@ -685,26 +685,116 @@ reported `no_change` with zero proposals. Two runs stayed two runs.
 
 ---
 
+## 2026-08-07 (last) — the second movement: it examines the pile
+
+The playbook had sat in `config/` since the first commit with nothing consuming
+it. EXAMINE is now a graph node between `compose` and `delta`.
+
+### The decision that made it honest
+
+**A rule has three outcomes, not two.** `violated`, `satisfied`, and
+`not_enough_evidence`. The third is the one that makes the other two worth
+reading: a rule the pile could not answer is not a rule the pile passed, and
+collapsing them is how a report comes to say a contract is clean when what
+actually happened is that nobody could tell. A pile with no facts reports "no
+rule could be judged", not "no violations".
+
+Against `pile_acme`: 4 violated, 3 satisfied, 1 unjudgeable.
+
+| Rule | What it found |
+|---|---|
+| `hours_within_sow_cap` | 460 hours billed against a 400 cap, over by 60 |
+| `rate_matches_current_agreement` | amendment governs at USD 135, invoice billed 120 |
+| `payment_terms_consistent` | MSA governs at 30 days, the invoice states 45 |
+| `termination_notice_observed` | MSA requires 60 days, the notice gave 30 |
+
+### No model is called, on purpose
+
+"Invoice 1043 billed 40 hours against a cap of 35" is subtraction. Asking a
+model turns a citable, always-correct finding into an occasionally-wrong one a
+reviewer has to check — and this stage runs on every arrival, so it also costs
+nothing to keep it that way. There is a test asserting the stage spends zero
+tokens. The place a model would genuinely earn its keep is a rule that needs
+reading rather than counting; that is the `judged` kind the vocabulary does not
+have yet, named in the module so its absence is a decision rather than a gap.
+
+### Where configuration-over-code actually stops
+
+A rule is a block in `playbook.yaml` naming one of six check kinds. Adding a
+rule shaped like an existing one is YAML and nothing else — there is a test that
+adds one and gets a cited finding without touching Python. Adding a new kind of
+arithmetic *is* Python. Stating that boundary is better than claiming the
+stronger version and being caught by the first reviewer who tries.
+
+A mistyped check kind or a missing parameter fails when the domain loads. A rule
+that quietly stops being enforced is worse than no rule at all.
+
+### Two things the first version got wrong
+
+**It accused the MSA of violating the amendment that amended it.** That is not a
+finding — it is the definition of an amendment. Found by reading the output
+rather than by a test, which is the argument for looking at what a stage
+actually says before believing it works. `must_match` now names the document
+types genuinely bound to comply.
+
+**It treated equal authority disagreeing as a breach.** Two documents of the
+same rank stating different values is unsettled, and naming one of them the
+governing value here would silently resolve exactly what the gate exists to keep
+open. It now reports that the question belongs to the conflict, not to the rule.
+
+`amendment_references_parent` is kept and reports that it cannot be judged: no
+extraction schema declares the field, so nothing in the pile could answer it
+however the contracts are written. That is a gap in *our* configuration, and
+calling it a violation would blame the documents for our omission. Adding
+`amends_agreement` to `extraction/amendment.yaml` is what would make it live —
+and that changes a prompt, so it would need fixtures re-recorded.
+
+`no_instructions_in_sources` is where behaviour 8 stops being a branch in the
+pipeline and becomes something a reviewer reads: quarantine already kept the
+document out of every input, and the playbook states it and quotes the text
+back.
+
+### Proven
+
+Both load-bearing properties were mutation-checked rather than trusted:
+collapsing `not_enough_evidence` into `satisfied` fails five tests, and ignoring
+`must_match` fails the superseded-document and clean-pile tests. Findings reach
+the gate as their own items — violations only, because a rule that passed is
+something to read and not something to approve — and a finding whose text has
+not changed is never re-asked. Verified over HTTP against the container, with
+citations and character offsets on every violation.
+
+---
+
 ## PICK UP HERE
 
 ### State as of 2026-08-07
 
-25 commits, 222 tests green offline, $0.00 spent. **Behaviours 1–10 all done.**
-Verified against `docker compose up`, not only in the suite.
+27 commits, 239 tests green offline, $0.00 spent. **Behaviours 1–10 all done**,
+and **all three movements exist** — understand, examine, stay alive. Verified
+against `docker compose up`, not only in the suite.
 
 ### Remaining, in order
 
-1. **The EXAMINE stage** against `config/domains/vendor_contracts/rules/playbook.yaml`
-   — the second of the three movements the brief asks for and the largest
-   untouched gap. Nothing consumes the playbook yet. It slots in as a graph node
-   between `compose` and `delta`; findings become proposals like everything
-   else, and the `finding` and `finding_citation` tables already exist. The hard
-   part is named in PLAN.md §6: a clean pile has to produce an honest report of
-   nothing found, and models want to be helpful and will manufacture one.
-2. React review UI (degradable to a minimal table; first item on the cut list).
-   Every operation it needs is already in `app/operations.py`.
-3. Second corpus `pile_northwind` — currently empty; seeding skips it gracefully.
-4. Tasks 2, 3, 4.
+1. **React review UI** — first item on the declared cut list, and degradable to
+   a minimal table. Every operation it needs is already in `app/operations.py`;
+   it is a client of that, never a privileged path.
+2. **Second corpus `pile_northwind`** — currently empty; seeding skips it
+   gracefully. Genuinely different documents, so "it works the second time"
+   holds. The register and the playbook should both come out different.
+3. **Tasks 2, 3, 4** — the SuperDocs build (separate repo), the use-case list,
+   and the demo video plus write-up.
+
+### Worth putting in the write-up
+
+- LangGraph's default `durability="async"` is the ordering that loses work. The
+  framework gives you a checkpoint, not behaviour 2.
+- The claim about concurrent runs that had to be withdrawn after measuring it.
+- Where configuration-over-code stops in the playbook, stated rather than
+  claimed away.
+- Why EXAMINE calls no model.
+- `decided_via`: how behaviour 3 and behaviour 4 were reconciled instead of one
+  being chosen over the other.
 
 ### Notes for whoever picks this up
 
@@ -716,7 +806,7 @@ Verified against `docker compose up`, not only in the suite.
   nothing and `propose` exists separately.
 - State is plain JSON on purpose. If something needs a custom serialiser to
   cross a node boundary, load it from the database instead.
-- New capabilities go in `app/operations.py`, never in a surface. There are two
-  tests that will fail if a surface grows a decision of its own.
-- Recording fixtures is only needed if a *prompt* changes:
+- New capabilities go in `app/operations.py`, never in a surface. Two tests will
+  fail if a surface grows a decision of its own.
+- Re-recording fixtures is only needed if a *prompt* changes:
   `LLM_PROVIDER=openrouter RECORD_FIXTURES=1 .venv/bin/python -m scripts.record_fixtures`
