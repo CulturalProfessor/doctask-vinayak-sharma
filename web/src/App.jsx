@@ -40,7 +40,7 @@
  * One of those changes the deliverable and the rest do not, and a flat row of
  * six equal tabs said they were all the same kind of thing.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api, ApiError } from './api'
 import {
   Audit, Detail, Empty, EndRun, Findings, NearMatch, Picker, Register, Sources,
@@ -170,6 +170,11 @@ export default function App() {
 
   const [tab, setTab] = useState('review')
   const [theme, setTheme] = useState(storedTheme)
+  // The pane and the queue are each one DOM node reused for every item, so
+  // their scroll position outlives the thing that was in them. See the effects
+  // below `applyTheme`.
+  const paneRef = useRef(null)
+  const queueRef = useRef(null)
   const [busy, setBusy] = useState(null)
   const [error, setError] = useState(null)
   const [notice, setNotice] = useState(null)
@@ -237,6 +242,31 @@ export default function App() {
   }, [loadRun])
 
   useEffect(() => { applyTheme(theme) }, [theme])
+
+  /* Start each item at its beginning.
+   *
+   * React keeps the same scrolling element across a selection change, so its
+   * scrollTop survives into the next item. Picking a long conflict and then a
+   * short one used to open the short one part way down, or past its end
+   * entirely -- and the thing scrolled out of view is the claim being decided,
+   * which is the one part a reviewer must not skip.
+   *
+   * Instantly, not smoothly: this is a different document, not a move within
+   * one, and animating the arrival would run the new item's evidence past
+   * somebody who has not read the top of it yet. */
+  useEffect(() => {
+    paneRef.current?.querySelector('.detail-scroll, .sheet')?.scrollTo({ top: 0 })
+  }, [selected, tab])
+
+  /* Keep the item being decided visible in the queue.
+   *
+   * `block: 'nearest'` means this does nothing at all when the item is already
+   * on screen, which is the common case; it only acts when a decision or a
+   * refresh has moved the selection somewhere out of sight. Anything stronger
+   * would re-centre the list under a reviewer who was reading it. */
+  useEffect(() => {
+    queueRef.current?.querySelector('.item.on')?.scrollIntoView({ block: 'nearest' })
+  }, [selected])
 
   useEffect(() => {
     api.health().then(setHealth).catch(() => setHealth({ status: 'unreachable' }))
@@ -709,7 +739,7 @@ export default function App() {
                 </div>
               </nav>
 
-              <div className="pane">
+              <div className="pane" ref={paneRef}>
                 {tab === 'review' && (
                   !run ? (
                     <Empty big="Nothing is open on this pile.">
@@ -725,7 +755,7 @@ export default function App() {
                     </Empty>
                   ) : (
                     <>
-                      <div className="queue">
+                      <div className="queue" ref={queueRef}>
                         <div className="queue-head">
                           <span className="cap">To decide, most serious first</span>
                           <span className="count">{chosen} / {pending.length}</span>

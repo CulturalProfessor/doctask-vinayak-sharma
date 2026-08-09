@@ -58,6 +58,11 @@
   --focus: #7aa5e8;
   --shadow: 0 8px 28px rgba(0, 0, 0, 0.55);
 
+  /* Scrollbars are drawn from the ink rather than given a colour of their own,
+     so they read as the surface being worn away rather than as furniture. */
+  --scroll: rgba(236, 231, 219, 0.17);
+  --scroll-lit: rgba(236, 231, 219, 0.34);
+
   --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
   --sans: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 
@@ -77,6 +82,7 @@
     --blue: #2f5fa8; --blue-dim: rgba(47, 95, 168, 0.08);
     --mark-bg: #fbeec2; --mark-line: #c9a94e;
     --shadow: 0 8px 28px rgba(28, 26, 23, 0.16);
+    --scroll: rgba(28, 26, 23, 0.20); --scroll-lit: rgba(28, 26, 23, 0.38);
     color-scheme: light;
   }
 }
@@ -91,6 +97,7 @@
   --blue: #2f5fa8; --blue-dim: rgba(47, 95, 168, 0.08);
   --mark-bg: #fbeec2; --mark-line: #c9a94e;
   --shadow: 0 8px 28px rgba(28, 26, 23, 0.16);
+  --scroll: rgba(28, 26, 23, 0.20); --scroll-lit: rgba(28, 26, 23, 0.38);
   color-scheme: light;
 }
 
@@ -103,6 +110,61 @@ body {
   color: var(--ink);
   background: var(--bg);
   -webkit-font-smoothing: antialiased;
+  /* The page itself never scrolls -- `.app` is the full viewport and hides its
+     overflow -- so any scroll that reaches the document is a bounce at the end
+     of an inner list, animating a page that has nowhere to go. */
+  overscroll-behavior: none;
+}
+
+/* ------------------------------------------------------------- scrollbars --
+ *
+ * Six things scroll on this screen: the sidebar, the queue, the detail pane,
+ * each evidence sheet, the file picker and the cost table sideways. The
+ * platform default is a light slab that sits on a dark panel like a strip of
+ * tape, and six of them turn a quiet screen into a scaffold.
+ *
+ * So: a 4px thumb drawn from the ink at low opacity, no track at all, brighter
+ * on hover so it is still obviously a handle. Both syntaxes are set because
+ * they cover different browsers -- `scrollbar-width` and `scrollbar-color` are
+ * inherited, so `html` reaches every scroller including ones added later, and
+ * the WebKit pseudo-elements serve Safari and Chrome before 121. Where both are
+ * understood the standard properties win, and the two are tuned to match.
+ */
+html {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scroll) transparent;
+}
+::-webkit-scrollbar { width: 11px; height: 11px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-corner { background: transparent; }
+::-webkit-scrollbar-thumb {
+  /* A transparent border with `padding-box` clipping is what makes an 11px
+     scrollbar draw a 5px thumb with air around it, rather than a bar wedged
+     against the content it is scrolling. */
+  background: var(--scroll);
+  background-clip: padding-box;
+  border: 3px solid transparent;
+  border-radius: 6px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--scroll-lit);
+  background-clip: padding-box;
+}
+
+/* Every scroll container on this screen, in one place.
+ *
+ * `overscroll-behavior: contain` stops a flick at the bottom of the queue from
+ * handing the scroll to whatever is behind it. `scrollbar-gutter: stable` is
+ * the one that shows: without it, switching to an item whose evidence fits
+ * removes the scrollbar and every line of text steps sideways, which reads as
+ * the screen flinching each time you pick something. */
+aside,
+.queue,
+.detail-scroll,
+.sheet,
+.picker {
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 ul { list-style: none; }
@@ -130,8 +192,12 @@ mark {
 /* ------------------------------------------------------------------ frame -- */
 
 .app {
+  /* dvh first where it is understood: on a phone, 100vh is the viewport with
+     the browser chrome hidden, so the review desk's bottom row sits under it. */
   height: 100vh;
+  height: 100dvh;
   max-height: 100vh;
+  max-height: 100dvh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -285,7 +351,18 @@ aside .hint { margin-top: 8px; }
 .docs .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .docs .bad { color: var(--red); font-size: 11px; margin-left: auto; flex: none; }
 
-.side-actions { display: flex; flex-direction: column; gap: 6px; }
+/* Pinned to the bottom of the sidebar, because the sidebar is one scroller and
+   a pile with forty documents would otherwise push the only two ways to start
+   work below the fold, reachable by scrolling past a list nobody was reading. */
+.side-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  position: sticky;
+  bottom: 0;
+  background: var(--panel);
+  border-top: 1px solid var(--line-soft);
+}
 .side-actions button {
   font-size: 12.5px;
   padding: 6px 10px;
@@ -381,7 +458,13 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
   border-bottom: 1px solid var(--line);
   flex: none;
   overflow-x: auto;
+  /* The one scroller with no visible bar. This strip is 40px tall and a
+     scrollbar inside it lands across the underline that marks the open tab.
+     It is a control strip rather than content, so nothing is lost by reading
+     it: the tabs only overflow on a narrow window, and dragging still works. */
+  scrollbar-width: none;
 }
+.tabs::-webkit-scrollbar { height: 0; }
 .tabs .group { display: flex; align-items: center; gap: 2px; }
 .tabs .group > .cap { margin-right: 6px; flex: none; }
 .tabs .sep { width: 1px; height: 18px; background: var(--line); flex: none; }
@@ -430,6 +513,13 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
   border-right: 1px solid var(--line);
   background: var(--panel);
   overflow-y: auto;
+}
+/* Only the queue scrolls itself, when a decision moves the selection to an item
+   that is off screen. Gliding there shows which direction the list moved; a
+   jump leaves a reviewer working out where they are. The detail pane
+   deliberately does not do this -- see App.jsx. */
+@media (prefers-reduced-motion: no-preference) {
+  .queue { scroll-behavior: smooth; }
 }
 .queue-head {
   position: sticky;
