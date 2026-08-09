@@ -50,6 +50,12 @@ class DecideRequest(BaseModel):
     decided_by: str = Field(description="who is deciding; recorded on every item")
 
 
+class AbandonRequest(BaseModel):
+    abandoned_by: str = Field(description="who is ending this run; recorded on it")
+    reason: str = Field(description="why; a run that ends unexplained is a gap "
+                                    "in the record of the pile")
+
+
 def _translate(call):
     """Domain exceptions to status codes, in one place.
 
@@ -66,6 +72,11 @@ def _translate(call):
     except ops.PileBusy as exc:
         # 409, not 500 and not a queue. The caller is told which run holds the
         # pile and that nothing was written, and can decide what to do.
+        raise HTTPException(409, str(exc))
+    except ops.Finished as exc:
+        # 409 and not 400. Nothing is wrong with the request; it has arrived at
+        # a run whose story is over. Reported as a bad request it reads like the
+        # caller made a mistake, and the caller's next move is to look for one.
         raise HTTPException(409, str(exc))
     except ops.Invalid as exc:
         raise HTTPException(409 if "pending" in str(exc) else 400, str(exc))
@@ -135,6 +146,17 @@ def resume(run_id: str) -> dict:
     on its own.
     """
     return _translate(lambda: ops.resume(run_id))
+
+
+@router.post("/runs/{run_id}/abandon")
+def abandon(run_id: str, body: AbandonRequest) -> dict:
+    """End a run that will never finish. Keeps everything it wrote.
+
+    POST rather than DELETE, and that is not pedantry about verbs. DELETE would
+    describe the operation that is deliberately not offered: the run's row, its
+    facts and its costs all stay, and only its status changes.
+    """
+    return _translate(lambda: ops.abandon(run_id, body.abandoned_by, body.reason))
 
 
 @router.get("/runs/{run_id}/report")

@@ -202,6 +202,7 @@ def test_every_operation_is_reachable_from_the_machine_interface():
         "register": "doctask_get_register",
         "findings": "doctask_get_findings",
         "audit": "doctask_get_audit",
+        "abandon": "doctask_abandon_run",
         "search": "doctask_search_sources",
         "entities": "doctask_list_entities",
         "watch_status": "doctask_watch_status",

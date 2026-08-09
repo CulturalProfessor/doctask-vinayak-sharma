@@ -24,6 +24,7 @@ do, because neither of them knows.
     doctask_decide              approve and reject, item by item
     doctask_commit              write exactly what was approved
     doctask_resume              continue a run that stopped
+    doctask_abandon_run         end one that never can, keeping what it wrote
     doctask_get_register        the committed deliverable
     doctask_get_findings        what the playbook said, rule by rule
     doctask_get_audit           what changed, when, because of which source
@@ -209,6 +210,25 @@ def doctask_resume(run_id: str) -> str:
     answers already paid for are replayed rather than bought again.
     """
     return _result(lambda: ops.resume(run_id))
+
+
+@server.tool()
+def doctask_abandon_run(run_id: str, abandoned_by: str, reason: str) -> str:
+    """End a run that will never finish. Nothing it wrote is removed.
+
+    For a run that cannot be resumed and cannot be completed -- its document was
+    deleted for good, or the arrival was a mistake. The run keeps its facts, its
+    costs and its proposals, and gains a recorded ending; its proposals stay
+    undecided, because nobody decided them.
+
+    Both arguments are required. An ending with no author and no reason is a
+    hole in the pile's history, and this is the one operation whose whole
+    justification is that history is not thrown away.
+
+    Refused for a run that is genuinely alive: that run holds its pile, and the
+    answer names it.
+    """
+    return _result(lambda: ops.abandon(run_id, abandoned_by, reason))
 
 
 # --------------------------------------------------------------- the gate --

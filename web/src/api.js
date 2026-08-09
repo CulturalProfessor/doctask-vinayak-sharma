@@ -86,6 +86,10 @@ export const api = {
     `/piles/${pileId}/runs${status ? `?status=${encodeURIComponent(status)}` : ''}`),
   getRun: (runId) => request(`/runs/${runId}`),
   resume: (runId) => post(`/runs/${runId}/resume`),
+  // Ends a reading that can never finish. Not a delete: the server keeps the
+  // run, its facts and its costs, and only stops it from being continued.
+  abandon: (runId, abandonedBy, reason) =>
+    post(`/runs/${runId}/abandon`, { abandoned_by: abandonedBy, reason }),
 
   proposals: (runId) => request(`/runs/${runId}/proposals`),
   decide: (runId, decisions, decidedBy) =>

@@ -43,7 +43,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api, ApiError } from './api'
 import {
-  Audit, Detail, Empty, Findings, NearMatch, Picker, Register, Sources, Stages, Watch,
+  Audit, Detail, Empty, EndRun, Findings, NearMatch, Picker, Register, Sources,
+  Stages, Watch,
 } from './components'
 
 const DECIDE_TABS = [{ id: 'review', label: 'Review' }]
@@ -147,6 +148,10 @@ export default function App() {
   const [localFile, setLocalFile] = useState(null)
   const [newPile, setNewPile] = useState('')
   const [dialog, setDialog] = useState(null)   // 'read' | 'arrive' | null
+  // Ending a run is deliberately two steps. The panel is where the promise that
+  // nothing is deleted gets made, and a one-click version would skip it.
+  const [ending, setEnding] = useState(false)
+  const [endReason, setEndReason] = useState('')
 
   const [run, setRun] = useState(null)
   const [runs, setRuns] = useState([])
@@ -220,7 +225,11 @@ export default function App() {
    *  not have them, so it shows them as unknown instead of as zero. */
   const open = useCallback(async (row) => {
     setRun({ run_id: row.id, status: row.status, kind: row.kind,
-             pending_proposals: Number(row.pending_proposals) })
+             pending_proposals: Number(row.pending_proposals),
+             // Carried so that a reading someone ended says who ended it and
+             // why, rather than only that it stopped. "Abandoned" with no
+             // account of it is the kind of dead end this was built to remove.
+             abandoned_by: row.abandoned_by, abandon_reason: row.abandon_reason })
     setVerdicts({})
     setNotice(null)
     setTab('review')
@@ -356,6 +365,23 @@ export default function App() {
     setRun(result)
     setNotice(result.note)
     await Promise.all([loadRun(result.run_id), loadPile(pileId), refreshRuns(pileId)])
+  }
+
+  async function abandon() {
+    const done = await guard('ending the run',
+      () => api.abandon(run.run_id, decidedBy.trim(), endReason.trim()))
+    if (!done) return
+    setEnding(false)
+    setEndReason('')
+    setNotice(`Ended by ${done.abandoned_by}. `
+      + (done.left_undecided
+        ? `${done.left_undecided} item(s) left undecided. `
+        : '')
+      + 'Everything it read and everything it cost is still on the pile.')
+    setRun((prev) => ({ ...prev, status: 'abandoned',
+                        abandoned_by: done.abandoned_by,
+                        abandon_reason: done.reason }))
+    await Promise.all([loadRun(run.run_id), refreshRuns(pileId)])
   }
 
   async function runSearch() {
@@ -499,8 +525,16 @@ export default function App() {
                             hour: '2-digit', minute: '2-digit',
                           })}
                         </span>
+                        {/* An ended reading keeps its undecided items, so the
+                            count is still true -- but "pending" would read as
+                            work waiting for someone, and nobody is ever going
+                            to decide these. */}
                         {Number(r.pending_proposals) > 0 && (
-                          <span className="pending">{r.pending_proposals} pending</span>
+                          r.status === 'abandoned'
+                            ? <span className="pending done">
+                                {r.pending_proposals} left undecided
+                              </span>
+                            : <span className="pending">{r.pending_proposals} pending</span>
                         )}
                       </li>
                     ))}
@@ -618,6 +652,19 @@ export default function App() {
                   )}
                   {run.status === 'running' && (
                     <button onClick={resume} disabled={!!busy}>Resume</button>
+                  )}
+                  {/* Offered for any reading that has not finished, not only a
+                      stuck one. A reviewer who has decided a reading was a
+                      mistake should not have to wait for it to break first. */}
+                  {(run.status === 'running' || run.status === 'awaiting_approval') && (
+                    <button onClick={() => setEnding(true)} disabled={!!busy}>
+                      End this reading
+                    </button>
+                  )}
+                  {run.status === 'abandoned' && run.abandon_reason && (
+                    <span className="stat">
+                      ended by {run.abandoned_by}: {run.abandon_reason}
+                    </span>
                   )}
                 </div>
               )}
@@ -838,6 +885,19 @@ export default function App() {
           )}
         </main>
       </div>
+
+      {ending && run && (
+        <EndRun
+          run={run}
+          name={decidedBy}
+          onName={setDecidedBy}
+          reason={endReason}
+          onReason={setEndReason}
+          onConfirm={abandon}
+          onCancel={() => setEnding(false)}
+          busy={busy}
+        />
+      )}
 
       {dialog && (
         <Picker

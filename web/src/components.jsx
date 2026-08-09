@@ -1011,6 +1011,88 @@ export function Picker({ mode, corpora, value, onValue, localFile, onLocalFile,
   )
 }
 
+/* Ending a run that will never finish.
+ *
+ * Written to be un-scary, because it is not a destructive action and reading it
+ * as one would be the wrong lesson. The panel says plainly what stays, since
+ * every other button of this shape in every other tool deletes something, and
+ * someone who has been trained by those buttons will assume this one does too.
+ *
+ * A name and a reason are both required, matching the review gate. This is the
+ * one action whose whole justification is that the pile's history is kept, so
+ * it does not get to write an anonymous, unexplained line into that history. */
+export function EndRun({ run, name, onName, reason, onReason, onConfirm, onCancel, busy }) {
+  const ready = name.trim().length > 0 && reason.trim().length > 0
+  const undecided = run?.pending_proposals ?? 0
+
+  return (
+    <div className="scrim" onMouseDown={(e) => e.target === e.currentTarget && onCancel()}>
+      <div className="dialog" role="dialog" aria-modal="true">
+        <div className="head">
+          <h3>End this reading</h3>
+          <p>
+            For a reading that can never be finished: the document it was part
+            way through is gone for good, or it should not have been started.
+          </p>
+        </div>
+
+        <div className="keeps">
+          <p className="keeps-lede">Nothing is deleted.</p>
+          <ul>
+            <li>The facts it pulled out stay on the pile, still pointing at the
+              documents they came from.</li>
+            <li>What it cost stays in the record, so the totals keep adding up.</li>
+            <li>The documents it read stay read.</li>
+            <li>
+              {undecided > 0
+                ? <>Its {undecided} undecided item{undecided === 1 ? '' : 's'} stay undecided,
+                  because nobody decided them. They are not marked rejected on your behalf.</>
+                : <>Its items keep whatever you decided about them.</>}
+            </li>
+          </ul>
+          <p className="keeps-foot">
+            What changes is that it stops being work in progress, and it can no
+            longer be continued.
+          </p>
+        </div>
+
+        <label className="field">
+          <span>Your name</span>
+          <input
+            value={name}
+            onChange={(e) => onName(e.target.value)}
+            placeholder="who is ending it"
+          />
+        </label>
+        <label className="field">
+          <span>Why</span>
+          <input
+            value={reason}
+            onChange={(e) => onReason(e.target.value)}
+            placeholder="so that whoever reads this pile later knows"
+          />
+        </label>
+
+        <div className="foot">
+          <span className="chosen">
+            <span className="hint">
+              {ready ? 'recorded against your name' : 'both are needed'}
+            </span>
+          </span>
+          <button type="button" onClick={onCancel}>Keep it</button>
+          <button
+            type="button" className="primary"
+            disabled={!ready || !!busy}
+            onClick={onConfirm}
+          >
+            End it
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function Empty({ big, children, good }) {
   return (
     <div className={`empty${good ? ' good' : ''}`}>

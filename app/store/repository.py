@@ -37,10 +37,28 @@ def create_run(conn: psycopg.Connection, pile_id: str, kind: str = "full",
 def set_run_status(conn: psycopg.Connection, run_id: str, status: str) -> None:
     execute(conn, """
         UPDATE run SET status = %s,
-               ended_at = CASE WHEN %s IN ('committed', 'failed', 'cancelled', 'no_change')
+               ended_at = CASE WHEN %s IN ('committed', 'failed', 'cancelled',
+                                           'no_change', 'abandoned')
                                THEN now() ELSE ended_at END
         WHERE id = %s
     """, (status, status, run_id))
+
+
+def abandon_run(conn: psycopg.Connection, run_id: str, abandoned_by: str,
+                reason: str) -> None:
+    """End a run that will never finish, keeping everything it did.
+
+    Nothing is deleted -- see `007_abandon.sql`. The facts, the stage events and
+    the proposals all stay exactly as they are, and the run gains an ending that
+    says who stopped it and why. `record_stage_event` puts the same thing in the
+    run's own history, so the answer is visible from the run's timeline and not
+    only from a column somebody has to think to look at.
+    """
+    set_run_status(conn, run_id, "abandoned")
+    execute(conn, "UPDATE run SET abandoned_by = %s, abandon_reason = %s WHERE id = %s",
+            (abandoned_by, reason, run_id))
+    record_stage_event(conn, run_id, "abandon", "abandoned",
+                       detail={"by": abandoned_by, "reason": reason})
 
 
 def get_run(conn: psycopg.Connection, run_id: str) -> dict[str, Any] | None:

@@ -1,0 +1,24 @@
+-- Ending a run that will never finish, without pretending it never happened.
+--
+-- Some runs cannot be completed and cannot be resumed. The document one was
+-- reading is deleted for good; an arrival turns out to have been a mistake; a
+-- reviewer decides the whole reading should be started again. Before this there
+-- was no way to say so: the run stayed 'running' forever, listed as work in
+-- progress, offering a Resume that would refuse every time.
+--
+-- The obvious fix -- delete the row -- is the wrong one, and is why this is a
+-- status and two columns rather than a DELETE. A run is not a task, it is a
+-- record of work that actually took place. Facts it extracted are in the pile.
+-- Model calls it paid for are in stage_event and are what makes the cost report
+-- add up. Documents it ingested are cited by other runs' registers. Deleting
+-- the run would cascade all of that away, and the pile would be left holding
+-- facts whose provenance had been erased -- the exact failure this system is
+-- built to prevent, performed on itself by its own cleanup button.
+--
+-- So an abandoned run keeps everything and gains an ending: who ended it, why,
+-- and when. Its proposals are deliberately left 'pending', because that is what
+-- is true. Nobody decided them. Rewriting them to 'rejected' would put words in
+-- a reviewer's mouth and make the audit trail claim a review that never
+-- happened; the run's status is what tells a reader they will stay undecided.
+ALTER TABLE run ADD COLUMN IF NOT EXISTS abandoned_by    TEXT;
+ALTER TABLE run ADD COLUMN IF NOT EXISTS abandon_reason  TEXT;

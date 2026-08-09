@@ -50,8 +50,10 @@ tabs are grouped into **Decide** and **Evidence** because one of those changes
 the deliverable and the rest are how a reviewer checks it. Nothing asks anyone
 to type a path. `GET /corpora` lists what is on disk and the screen offers it,
 with unreadable files shown greyed out and labelled rather than hidden, and a
-document on your own machine can be dropped straight in. Dark by default, with
-light and system still on the toggle.
+document on your own machine can be dropped straight in. A reading that can
+never finish can be ended — which keeps everything it wrote and only stops it
+being continued, because deleting the row would cascade away facts other
+registers cite. Dark by default, with light and system still on the toggle.
 
 Its wording is deliberately free of this repository's vocabulary. No spans, no
 payloads, no hashes, no operations, no checkpoints: a contracts analyst reading
@@ -203,7 +205,7 @@ hash no longer matches the one on the proposal.
 
 ### Storage
 
-Postgres, 17 tables. The shape carries the invariants:
+Postgres, 19 tables. The shape carries the invariants:
 
 | | |
 |---|---|
@@ -217,6 +219,7 @@ Postgres, 17 tables. The shape carries the invariants:
 | `proposal` | what was put to a person, and what they said |
 | `audit` | from-hash, to-hash, cause document, when |
 | `run` / `stage_event` / `model_call` | the trail, the cost, and the ledger |
+| `run.abandoned_by` / `abandon_reason` | why a reading that never finished was stopped |
 | `checkpoints` (LangGraph) | resumability |
 
 `langgraph` 1.2.10 · `langgraph-checkpoint-postgres` 3.1.1 · `mcp` 2.0.0 ·
@@ -464,7 +467,7 @@ docker compose up -d db
 .venv/bin/python -m pytest
 ```
 
-284 tests, all green. Runs with no API key and no network — `LLM_PROVIDER=fake`
+299 tests, all green. Runs with no API key and no network — `LLM_PROVIDER=fake`
 replays recorded responses, and tests pin that default and LangSmith's tracing
 flags so neither can drift into reaching the network on someone else's machine.
 (Those pin the configuration; nothing blocks sockets at runtime, so this is a
@@ -475,8 +478,9 @@ of identical bytes that changes nothing, a clean corpus that honestly reports no
 findings, a half-written file the watcher refuses to touch, a broken one it
 declines to retry forever, an abbreviated counterparty name that escalates
 instead of splitting the pile, a source document edited underneath a halted run
-so that its citations would quote text it no longer contains, and a full pile
-driven from empty to committed register over MCP with no HTTP and no browser.
+so that its citations would quote text it no longer contains, a run ended by
+hand that keeps every fact and every cost it produced, and a full pile driven
+from empty to committed register over MCP with no HTTP and no browser.
 
 ## Security note
 

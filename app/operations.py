@@ -27,7 +27,7 @@ from typing import Any
 
 from app.domain.config import ConfigError, load_domain
 from app.graph import pipeline
-from app.graph.locking import PileBusy
+from app.graph.locking import PileBusy, hold_pile
 from app.graph.sources import SourceUnavailable
 from app.llm.base import get_provider
 from app.settings import REPO_ROOT
@@ -47,11 +47,21 @@ class Invalid(ValueError):
     """The request is well-formed but cannot be carried out as asked."""
 
 
+class Finished(Invalid):
+    """This run has ended. Committed, or deliberately abandoned.
+
+    Its own type because the difference is one a surface should be able to act
+    on without reading the message: nothing is wrong with the request, it has
+    arrived at a run whose story is over. An `Invalid` so that any caller
+    already handling refusals keeps handling this one.
+    """
+
+
 __all__ = [
-    "NotFound", "Invalid", "PileBusy", "SourceUnavailable",
+    "NotFound", "Invalid", "Finished", "PileBusy", "SourceUnavailable",
     "list_piles", "create_pile", "list_documents", "corpora", "upload",
     "start_run", "arrival", "get_run", "list_runs", "list_proposals", "decide",
-    "commit", "resume", "run_report", "register", "audit", "findings",
+    "commit", "resume", "abandon", "run_report", "register", "audit", "findings",
     "search", "entities", "watch_status",
 ]
 
@@ -270,7 +280,68 @@ def resume(run_id: str) -> dict[str, Any]:
     container does on its own. A machine driving this system needs the same
     recovery a person has.
     """
+    with transaction() as conn:
+        _require_open_run(conn, run_id, "resumed")
     return _summarise(_resume(run_id))
+
+
+def abandon(run_id: str, abandoned_by: str, reason: str) -> dict[str, Any]:
+    """End a run that will never finish, and keep everything it did.
+
+    Some runs cannot be completed. The document one was part-way through is
+    deleted for good, an arrival turns out to have been a mistake, a reviewer
+    decides the pile should be read again from the start. Without this the run
+    sits at 'running' forever, listed as work in progress, offering a resume
+    that refuses every time -- an item in a queue that nobody can clear is a
+    queue people stop trusting.
+
+    **This is not a delete, and the difference is the whole point.** A run is a
+    record of work that actually happened: facts it extracted are in the pile,
+    model calls it paid for are what make the cost report add up, documents it
+    ingested are cited by other runs' registers. Removing the row would take all
+    of that with it and leave the pile holding facts whose provenance had been
+    erased. So the run keeps everything and gains an ending.
+
+    Its proposals stay pending, because that is what is true -- nobody decided
+    them. Marking them rejected would put words in a reviewer's mouth and make
+    the audit trail describe a review that never took place.
+
+    Taking the pile is what makes this safe against the one case that would be a
+    disaster: a run that is genuinely alive. A live run holds its pile, so this
+    is refused with `PileBusy` and the caller is told which run has it. Only a
+    run whose process is gone, or one waiting at the gate, can be ended from
+    underneath, and neither is writing anything.
+    """
+    if not str(abandoned_by or "").strip():
+        raise Invalid("abandoned_by is required: ending a run is a decision, "
+                      "and a decision has to have a decider")
+    if not str(reason or "").strip():
+        raise Invalid("a reason is required: a run that ends with no explanation "
+                      "is a gap in the record of the pile")
+
+    with transaction() as conn:
+        run = _require_open_run(conn, run_id, "abandoned")
+        pile_id = str(run["pile_id"])
+        pending = len(repo.list_proposals(conn, run_id, status="pending"))
+
+    with transaction() as conn, hold_pile(conn, pile_id, wait_seconds=0.5):
+        # Re-read under the lock. Between the check above and here, the run
+        # could have been resumed to completion by someone else, and abandoning
+        # a run that just committed would be a lie about a register that exists.
+        run = _require_open_run(conn, run_id, "abandoned")
+        repo.abandon_run(conn, run_id, abandoned_by.strip(), reason.strip())
+        # Committed here, inside the lock, and not left to the context manager.
+        # Releasing the pile rolls the connection back first -- deliberately, so
+        # that unlocking a failed run cannot raise from a `finally` and replace
+        # the exception that killed it -- and an uncommitted abandonment sitting
+        # in that transaction goes down with it. Which is what happened: the
+        # operation returned success and changed nothing.
+        conn.commit()
+
+    return {"run_id": run_id, "status": "abandoned", "abandoned_by": abandoned_by.strip(),
+            "reason": reason.strip(), "left_undecided": pending,
+            "kept": "everything this run wrote: its facts, its costs and its "
+                    "proposals are still here and still attributed to it"}
 
 
 def get_run(run_id: str) -> dict[str, Any]:
@@ -333,7 +404,7 @@ def decide(run_id: str, decisions: list[dict[str, Any]], decided_by: str,
         raise Invalid("no decisions supplied")
 
     with transaction() as conn:
-        _require_run(conn, run_id)
+        _require_open_run(conn, run_id, "reviewed")
         counts = gate_module.decide(
             conn, run_id,
             [Decision(str(d["proposal_id"]), bool(d["approved"]), d.get("reason"))
@@ -349,7 +420,7 @@ def decide(run_id: str, decisions: list[dict[str, Any]], decided_by: str,
 def commit(run_id: str) -> dict[str, Any]:
     """Resume the run past its gate, writing exactly what was approved."""
     with transaction() as conn:
-        _require_run(conn, run_id)
+        _require_open_run(conn, run_id, "committed")
         pending = len(repo.list_proposals(conn, run_id, status="pending"))
     if pending:
         raise Invalid(f"{pending} proposal(s) still pending; a run cannot commit "
@@ -520,6 +591,33 @@ def _require_run(conn, run_id: str) -> dict[str, Any]:
     if not run:
         raise NotFound(f"no run {run_id}")
     return run
+
+
+# A run in one of these has ended. Nothing more can be done to it, and the
+# distinction matters in both directions: 'committed' produced a register that
+# people are relying on, and 'abandoned' was deliberately stopped by someone who
+# said why. Quietly restarting either would rewrite a finished story.
+FINISHED_RUN_STATUSES = ("committed", "no_change", "abandoned")
+
+
+def _require_open_run(conn, run_id: str, verb: str) -> dict[str, Any]:
+    """The run, if there is still anything to be done to it.
+
+    Written once rather than at each of the four call sites, because the surface
+    that forgets the check is the one that lets a committed register be reopened
+    or an abandoned run be silently resurrected.
+    """
+    run = _require_run(conn, run_id)
+    status = run["status"]
+    if status not in FINISHED_RUN_STATUSES:
+        return run
+    if status == "abandoned":
+        who = run.get("abandoned_by") or "someone"
+        why = run.get("abandon_reason") or "no reason recorded"
+        raise Finished(f"this run was abandoned by {who} ({why}) and cannot be {verb}. "
+                       f"Everything it wrote is still here; read the pile again to "
+                       f"start fresh work.")
+    raise Finished(f"this run is {status} and cannot be {verb}")
 
 
 def _under_corpora(relative: str) -> Path:
