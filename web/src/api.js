@@ -45,9 +45,22 @@ export const api = {
   listPiles: () => request('/piles'),
   createPile: (name) => post(`/piles?name=${encodeURIComponent(name)}`),
   listDocuments: (pileId) => request(`/piles/${pileId}/documents`),
+  // What is available to read. The screen offers these rather than asking
+  // someone to type a path they have no way to discover.
+  corpora: () => request('/corpora'),
 
   startRun: (pileId, corpus) => post('/runs', { pile_id: pileId, corpus }),
   arrival: (pileId, document) => post('/arrivals', { pile_id: pileId, document }),
+  // A document from the caller's own machine. Multipart rather than JSON so a
+  // large or binary file is streamed instead of held in memory as text, and so
+  // the browser sets its own boundary.
+  upload: (pileId, file) => {
+    const body = new FormData()
+    body.append('file', file)
+    return request(`/piles/${pileId}/documents`, {
+      method: 'POST', body, headers: {},
+    })
+  },
   listRuns: (pileId, status) => request(
     `/piles/${pileId}/runs${status ? `?status=${encodeURIComponent(status)}` : ''}`),
   getRun: (runId) => request(`/runs/${runId}`),
@@ -62,6 +75,18 @@ export const api = {
   register: (pileId) => request(`/piles/${pileId}/register`),
   findings: (pileId) => request(`/piles/${pileId}/findings`),
   audit: (pileId) => request(`/piles/${pileId}/audit`),
+
+  // Retrieval. `search` returns sources and an `index` block; the UI is
+  // required to show both, because "no hits" from an indexed pile and "no hits"
+  // from an empty one are different claims.
+  search: (pileId, query, limit = 8) => request(
+    `/piles/${pileId}/search?q=${encodeURIComponent(query)}&limit=${limit}`),
+  entities: (pileId) => request(`/piles/${pileId}/entities`),
+
+  // The watched location. Not scoped to a pile: it is a property of the
+  // deployment, and the answer to "is it even running" has to be readable when
+  // no pile is selected.
+  watch: () => request('/watch'),
 }
 
 export { ApiError }

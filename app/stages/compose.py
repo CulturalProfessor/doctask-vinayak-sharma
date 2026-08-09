@@ -144,7 +144,7 @@ def _render_fields(fields: list[str], by_field: dict[str, list[SourcedFact]],
         if not members:
             # An explicit gap, not a blank. "We could not establish this" and
             # "there is nothing to say here" are different claims.
-            rows.append([name, NOT_ESTABLISHED, "—", "—"])
+            rows.append([name, NOT_ESTABLISHED, "not stated", "no source"])
             gap_count += 1
             continue
         for sourced in members:
@@ -172,21 +172,21 @@ def _render_conflicts(conflicts: list[Conflict]) -> tuple[str, list[str], int]:
                  f"{_quote(m, 44)} [{m.fact.span.char_start}-{m.fact.span.char_end}]"]
                 for m in conflict.members]
         citations.extend(m.citation for m in conflict.members)
-        blocks.append(f"### {conflict.field} — {len(conflict.distinct_values)} distinct values")
+        blocks.append(f"### {conflict.field}: {len(conflict.distinct_values)} different values")
         blocks.append("")
         blocks.append(_table(["Type", "Document", "Value", "Where it says so"], rows))
         blocks.append("")
         if conflict.proposed is not None:
-            blocks.append(f"**Proposed:** {_trim(conflict.proposed.display)} "
+            blocks.append(f"**Suggested:** {_trim(conflict.proposed.display)} "
                           f"(from {conflict.proposed.document})")
         else:
-            blocks.append("**Proposed:** none — the documents do not settle this.")
+            blocks.append("**Suggested:** none. The documents do not settle this.")
         blocks.append("")
         blocks.append(f"_Reasoning: {conflict.rationale}_")
         blocks.append("")
         # Said in the deliverable itself, not only in the code, because the
         # reader is the person who has to act on it.
-        blocks.append("_Status: **open**. This is a proposal for review. "
+        blocks.append("_Still open. This is a suggestion put to a reviewer. "
                       "No value has been resolved or applied._")
         blocks.append("")
     return "\n".join(blocks).rstrip(), citations, 0
@@ -196,14 +196,14 @@ def _render_gaps(gaps: list[tuple[str, Gap]], cfg: DomainConfig,
                  by_field: dict[str, list[SourcedFact]]) -> tuple[str, list[str], int]:
     rows: list[list[str]] = []
     for document, gap in sorted(gaps, key=lambda g: (g[0], g[1].field_name)):
-        rows.append([gap.field_name, document, gap.reason, gap.detail or "—"])
+        rows.append([gap.field_name, document, gap.reason, gap.detail or "no detail"])
 
     declared: list[str] = []
     for spec in cfg.register.get("sections", []):
         declared.extend(spec.get("fields", []))
     for name in declared:
         if name not in by_field:
-            rows.append([name, "—", "not stated in any document in the pile", "—"])
+            rows.append([name, "no source", "not stated in any document in the pile", "none"])
 
     if not rows:
         return "_Nothing was left unestablished._", [], 0

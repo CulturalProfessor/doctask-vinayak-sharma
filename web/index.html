@@ -6,12 +6,25 @@
     <title>doctask — review</title>
     <!-- Applied before the bundle loads, and before first paint. React sets the
          same attribute, but it does so after mount, which is one frame of a
-         bright white page for anyone using dark. -->
+         bright white page for anyone using dark.
+
+         The `else` branch matters as much as the `if`. Dark is this screen's
+         default rather than a stored choice, so a first-time visitor on a
+         light-configured machine has nothing in localStorage and would
+         otherwise get one frame of the light theme from the
+         `prefers-color-scheme` rule before React stamps `dark` on the root.
+         Stamping it here keeps the default and the first paint the same
+         answer. -->
     <script>
       try {
         var t = localStorage.getItem('doctask-theme')
-        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t)
-      } catch (e) { /* private mode: fall back to the system setting */ }
+        document.documentElement.setAttribute(
+          'data-theme', t === 'light' || t === 'dark' ? t : 'dark')
+        if (t === 'system') document.documentElement.removeAttribute('data-theme')
+      } catch (e) {
+        // Private mode: no stored preference is readable, so take the default.
+        document.documentElement.setAttribute('data-theme', 'dark')
+      }
     </script>
   </head>
   <body>

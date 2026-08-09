@@ -159,9 +159,9 @@ def test_conflicted_fields_are_marked_in_their_section(report):
 
 def test_the_disagreements_section_says_nothing_is_resolved(report):
     body = report.register.section("disagreements").body
-    assert "**Proposed:**" in body
+    assert "**Suggested:**" in body
     assert "No value has been resolved or applied" in body
-    assert "Status: **open**" in body
+    assert "Still open" in body
 
 
 def test_composition_is_deterministic(cfg, report):
