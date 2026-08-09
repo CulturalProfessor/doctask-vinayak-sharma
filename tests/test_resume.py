@@ -258,3 +258,80 @@ def test_resuming_a_run_that_does_not_exist_refuses():
     with pytest.raises(LookupError, match="no run"):
         pipeline.resume(FakeProvider(),
                         run_id="00000000-0000-0000-0000-000000000000")
+
+
+# ------------------------------------ the world under a halted run changing --
+#
+# A run does not carry document text in its state; it carries the path and reads
+# the file again on resume. So between the gate and the commit, the source of
+# truth for a half-finished run sits on a disk that anybody can change. Both
+# ways that can go wrong used to be failures of the wrong kind: a deleted file
+# was an unhandled OS error escaping a graph node, which reached the browser as
+# a JSON parse error, and a *changed* file was not an error at all.
+
+def _ingested(conn, pile, tmp_path, body: bytes) -> tuple:
+    """A real document row and the file it was read from."""
+    from app.ingest.ingest import ingest_bytes
+
+    path = tmp_path / "amendment_01.md"
+    path.write_bytes(body)
+    result = ingest_bytes(conn, pile, path.name, body, uri=str(path))
+    conn.commit()
+    return path, result.document_id
+
+
+def test_a_source_read_back_unchanged_is_just_the_bytes(conn, pile, tmp_path):
+    """The control. Without it, a refusal test passes for a system that refuses
+    everything, which would be a worse system than the broken one."""
+    from app.graph.sources import read_source
+
+    body = b"# Amendment 01\n\nThe standard hourly rate is USD 135 per hour.\n"
+    path, document_id = _ingested(conn, pile, tmp_path, body)
+
+    assert read_source(conn, path, document_id) == body
+
+
+def test_a_source_that_vanished_says_which_file_and_where(conn, pile, tmp_path):
+    """The reviewer's next move is to put the file back, so the refusal has to
+    name it. This arrived as `FileNotFoundError` from inside a graph node, was
+    served as an HTTP 500, and was displayed as `Unexpected token 'I'`."""
+    from app.graph.sources import SourceUnavailable, read_source
+
+    path, document_id = _ingested(conn, pile, tmp_path, b"# Amendment 01\n")
+    path.unlink()
+
+    with pytest.raises(SourceUnavailable) as raised:
+        read_source(conn, path, document_id)
+    assert "amendment_01.md" in str(raised.value)
+    assert str(path) in str(raised.value)
+
+
+def test_a_source_that_changed_under_the_run_refuses(conn, pile, tmp_path):
+    """The dangerous one, and it used to pass silently.
+
+    Facts cite character ranges into the bytes that were ingested. New bytes at
+    the same path still resolve those ranges, still look precise, and quote text
+    that was never there. A register whose citations point at the wrong words
+    survives review -- the reviewer checks the quote, the quote is right there,
+    and it is wrong -- which is why this refuses rather than warns.
+    """
+    from app.graph.sources import SourceUnavailable, read_source
+
+    path, document_id = _ingested(
+        conn, pile, tmp_path, b"The standard hourly rate is USD 135 per hour.\n")
+    path.write_bytes(b"The standard hourly rate is USD 205 per hour.\n")
+
+    with pytest.raises(SourceUnavailable, match="changed on disk"):
+        read_source(conn, path, document_id)
+
+
+def test_a_document_with_no_row_is_read_without_inventing_a_hash(conn, pile, tmp_path):
+    """An unsupported format or a lost ingest race leaves no row to compare
+    against. Existence is then the only honest check; making one up would be
+    worse than admitting there is none."""
+    from app.graph.sources import read_source
+
+    path = tmp_path / "no_row.md"
+    path.write_bytes(b"never ingested\n")
+
+    assert read_source(conn, path, None) == b"never ingested\n"

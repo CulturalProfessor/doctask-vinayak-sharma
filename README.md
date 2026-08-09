@@ -464,7 +464,7 @@ docker compose up -d db
 .venv/bin/python -m pytest
 ```
 
-280 tests, all green. Runs with no API key and no network — `LLM_PROVIDER=fake`
+284 tests, all green. Runs with no API key and no network — `LLM_PROVIDER=fake`
 replays recorded responses, and tests pin that default and LangSmith's tracing
 flags so neither can drift into reaching the network on someone else's machine.
 (Those pin the configuration; nothing blocks sockets at runtime, so this is a
@@ -474,8 +474,9 @@ two runs racing for one pile, a document that tries to give orders, a re-ingest
 of identical bytes that changes nothing, a clean corpus that honestly reports no
 findings, a half-written file the watcher refuses to touch, a broken one it
 declines to retry forever, an abbreviated counterparty name that escalates
-instead of splitting the pile, and a full pile driven from empty to committed
-register over MCP with no HTTP and no browser.
+instead of splitting the pile, a source document edited underneath a halted run
+so that its citations would quote text it no longer contains, and a full pile
+driven from empty to committed register over MCP with no HTTP and no browser.
 
 ## Security note
 

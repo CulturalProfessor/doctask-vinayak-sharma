@@ -28,6 +28,7 @@ from typing import Any
 from app.domain.config import ConfigError, load_domain
 from app.graph import pipeline
 from app.graph.locking import PileBusy
+from app.graph.sources import SourceUnavailable
 from app.llm.base import get_provider
 from app.settings import REPO_ROOT
 from app.stages import gate as gate_module
@@ -47,7 +48,7 @@ class Invalid(ValueError):
 
 
 __all__ = [
-    "NotFound", "Invalid", "PileBusy",
+    "NotFound", "Invalid", "PileBusy", "SourceUnavailable",
     "list_piles", "create_pile", "list_documents", "corpora", "upload",
     "start_run", "arrival", "get_run", "list_runs", "list_proposals", "decide",
     "commit", "resume", "run_report", "register", "audit", "findings",

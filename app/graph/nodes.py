@@ -33,6 +33,7 @@ from langgraph.types import interrupt
 
 from app.domain.config import DomainConfig
 from app.domain.models import SourcedFact
+from app.graph.sources import read_source
 from app.graph.state import RunState, register_from_state, register_to_state
 from app.ingest.formats import detect_format, extract_pages
 from app.ingest.ingest import ingest_path
@@ -134,20 +135,19 @@ class Nodes:
 
     def classify(self, state: RunState) -> RunState:
         path = Path(state["current"])
-        text = self._page_text(path)
+        document_id = state["documents"].get(path.name)
+        text = self._page_text(path, document_id)
 
         with _Timer() as timer:
             result = classify_document(self.provider, self.cfg, path.name, text)
 
         repo.record_stage_event(
             self.conn, state["run_id"], "classify", result.path,
-            document_id=state["documents"].get(path.name),
+            document_id=document_id,
             ms=timer.ms, tokens_in=result.usage.tokens_in,
             tokens_out=result.usage.tokens_out, cost_usd=result.usage.cost_usd,
             model=result.usage.model, detail={"note": result.note},
         )
-
-        document_id = state["documents"].get(path.name)
 
         if result.quarantine:
             # Leaves the extraction path entirely. What the document says
@@ -184,7 +184,7 @@ class Nodes:
         run_id, pile_id = state["run_id"], state["pile_id"]
         document_id = state["documents"].get(path.name)
         doc_type = state["doc_types"][path.name]
-        text = self._page_text(path)
+        text = self._page_text(path, document_id)
 
         with _Timer() as timer:
             extraction = extract_document(self.provider, self.cfg, doc_type,
@@ -516,8 +516,15 @@ class Nodes:
 
     # ------------------------------------------------------------ helpers --
 
-    def _page_text(self, path: Path) -> str:
-        data = path.read_bytes()
+    def _page_text(self, path: Path, document_id: str | None) -> str:
+        """The document's words, read from the file this run ingested.
+
+        Goes through `read_source` rather than reading the path directly so that
+        a file which has vanished or changed under a halted run is a refusal
+        that names the file, and not a bare OS error escaping from inside a
+        graph node. See `app/graph/sources.py`.
+        """
+        data = read_source(self.conn, path, document_id)
         return extract_pages(data, detect_format(path, data))[0].text
 
     def _near_entity(self, pile_id: str):

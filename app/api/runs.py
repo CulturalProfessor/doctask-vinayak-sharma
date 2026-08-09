@@ -69,6 +69,12 @@ def _translate(call):
         raise HTTPException(409, str(exc))
     except ops.Invalid as exc:
         raise HTTPException(409 if "pending" in str(exc) else 400, str(exc))
+    except ops.SourceUnavailable as exc:
+        # 409 rather than 404 or 500. The run and the pile both exist and
+        # nothing is broken; the world outside changed under a halted run, and
+        # the message says which file and what to do about it. Reporting this as
+        # a server error is how a recoverable situation reads as a bug.
+        raise HTTPException(409, str(exc))
     except ProviderUnavailable as exc:
         raise HTTPException(503, f"model provider unavailable: {exc}")
     except ProviderError as exc:

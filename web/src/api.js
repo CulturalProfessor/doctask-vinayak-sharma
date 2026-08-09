@@ -26,13 +26,34 @@ async function request(path, options = {}) {
     ...options,
   })
   const text = await response.text()
-  const body = text ? JSON.parse(text) : null
+
+  // Not every response is JSON. An unhandled server error is plain text, and
+  // parsing it unconditionally used to throw a SyntaxError from in here --
+  // which is how a server saying "Internal Server Error" reached the screen as
+  // `Unexpected token 'I'`, a message about this file for a problem that has
+  // nothing to do with it. Whatever the server actually said is more useful
+  // than a parse failure, so a body that will not parse is kept as text.
+  let body = null
+  let parsed = true
+  if (text) {
+    try {
+      body = JSON.parse(text)
+    } catch {
+      parsed = false
+    }
+  }
+
   if (!response.ok) {
     // The server's refusals carry the reason a reviewer needs -- "9 proposals
     // still pending", "this pile is being worked on by run ...". Losing that
     // and showing "request failed" would throw away the useful half.
-    const detail = body?.detail ?? `${response.status} ${response.statusText}`
+    const detail = (parsed ? body?.detail : text.trim())
+      ?? `${response.status} ${response.statusText}`
     throw new ApiError(response.status, typeof detail === 'string' ? detail : JSON.stringify(detail))
+  }
+  if (!parsed) {
+    throw new ApiError(response.status,
+      `the server answered ${response.status} with something that is not JSON`)
   }
   return body
 }

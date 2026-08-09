@@ -110,6 +110,13 @@ def _result(call) -> str:
                            "written": "nothing"}, indent=2)
     except ops.Invalid as exc:
         return json.dumps({"error": "invalid", "detail": str(exc)}, indent=2)
+    except ops.SourceUnavailable as exc:
+        # An agent gets the same recoverable answer a person does: the document
+        # this run was reading is gone or has changed, nothing was written, and
+        # putting it back or sending the new version as an arrival are both
+        # things the agent can go and do.
+        return json.dumps({"error": "source_unavailable", "detail": str(exc),
+                           "written": "nothing"}, indent=2)
     except ProviderError as exc:
         return json.dumps({"error": "provider", "detail": str(exc)}, indent=2)
 
