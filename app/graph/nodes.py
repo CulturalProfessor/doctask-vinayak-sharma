@@ -37,9 +37,10 @@ from app.graph.state import RunState, register_from_state, register_to_state
 from app.ingest.formats import detect_format, extract_pages
 from app.ingest.ingest import ingest_path
 from app.llm.base import Provider
+from app.retrieval import search as retrieval
 from app.stages.classify import classify_document
 from app.stages.compose import Register, compose
-from app.stages.entities import resolve_entity
+from app.stages.entities import DEFAULT_NEAR_MATCH_SIMILARITY, resolve_entity
 from app.stages.extract import Gap, extract_document
 from app.stages.examine import Finding, examine
 from app.stages.reconcile import Conflict, ReconcileResult, reconcile
@@ -210,11 +211,13 @@ class Nodes:
             extraction.counterparty or "", known,
             schema.get("entity_key", "engagement:{counterparty_slug}"),
             self.cfg.reconciliation.get("entity"),
+            near_match=self._near_entity(pile_id),
         )
         repo.record_stage_event(
             self.conn, run_id, "resolve_entity", resolution.method,
             document_id=document_id,
-            detail={"entity_key": resolution.entity_key, "note": resolution.note},
+            detail={"entity_key": resolution.entity_key, "note": resolution.note,
+                    "similarity": resolution.similarity},
         )
 
         if resolution.escalate:
@@ -245,6 +248,16 @@ class Nodes:
                                entity_key=resolution.entity_key, fact=fact)
                    for fact in extraction.facts]
         repo.persist_facts(self.conn, pile_id, run_id, document_id, sourced)
+
+        # Index the name this engagement was first known by, so the *next*
+        # document that spells it differently is compared against what a
+        # document actually said rather than against a slug. Written after the
+        # facts, because an engagement only exists once something is attributed
+        # to it -- indexing a name for a key that carries no facts would leave
+        # the pile escalating documents against a party it never recorded.
+        if extraction.counterparty:
+            retrieval.remember_entity(self.conn, pile_id, resolution.entity_key,
+                                      extraction.counterparty)
 
         return {
             "gaps": gaps,
@@ -506,6 +519,25 @@ class Nodes:
     def _page_text(self, path: Path) -> str:
         data = path.read_bytes()
         return extract_pages(data, detect_format(path, data))[0].text
+
+    def _near_entity(self, pile_id: str):
+        """The similarity lookup `resolve_entity` uses for its fourth step.
+
+        Bound here rather than imported there so that entity resolution stays a
+        pure function with no connection of its own, and stays testable without
+        a database. The threshold comes from the domain's configuration because
+        how alike two counterparty names can legitimately be is a property of
+        the domain, not of the code.
+        """
+        entity_cfg = self.cfg.reconciliation.get("entity") or {}
+        threshold = float(entity_cfg.get("near_match_similarity",
+                                         DEFAULT_NEAR_MATCH_SIMILARITY))
+
+        def look(candidate: str) -> dict[str, Any] | None:
+            return retrieval.nearest_entity(self.conn, pile_id, candidate,
+                                            min_similarity=threshold)
+
+        return look
 
     def _gaps(self, state: RunState) -> list[tuple[str, Gap]]:
         """Everything the register could not establish, from both directions.

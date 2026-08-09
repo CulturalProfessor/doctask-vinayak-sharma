@@ -16,6 +16,8 @@ from typing import Any, Iterable
 import psycopg
 
 from app.domain.models import SourcedFact
+from app.retrieval.embed import embed_or_none
+from app.retrieval.search import vector_literal
 from app.stages.compose import Register
 from app.stages.reconcile import Conflict
 from app.store.engine import execute, fetch_all, fetch_one
@@ -123,14 +125,24 @@ def persist_facts(conn: psycopg.Connection, pile_id: str, run_id: str,
     Ordered this way because `fact.span_id` is NOT NULL -- the database refuses
     the alternative, which is the point of putting the invariant in the schema
     rather than in a code review comment.
+
+    The embedding is written in the same INSERT as the span rather than by a
+    pass afterwards. A span that exists without its vector is invisible to
+    similarity search, so a two-step write would leave a window in which the
+    pile is searchable and wrong about what it contains -- and if the process
+    died inside that window it would stay wrong. `embed_or_none` returns NULL
+    for text with no alphanumeric features, which is a real answer and not a
+    failure: that span is not retrievable by similarity, and the column says so.
     """
     ids: list[str] = []
     for sourced in facts:
         span = sourced.fact.span
+        vector = embed_or_none(span.text)
         span_row = fetch_one(conn, """
-            INSERT INTO span (document_id, page_no, char_start, char_end, text)
-            VALUES (%s, %s, %s, %s, %s) RETURNING id
-        """, (document_id, 1, span.char_start, span.char_end, span.text))
+            INSERT INTO span (document_id, page_no, char_start, char_end, text, embedding)
+            VALUES (%s, %s, %s, %s, %s, %s::vector) RETURNING id
+        """, (document_id, 1, span.char_start, span.char_end, span.text,
+              vector_literal(vector) if vector is not None else None))
         normalised = sourced.fact.normalised
         fact_row = fetch_one(conn, """
             INSERT INTO fact (pile_id, document_id, span_id, run_id, entity_key, field,

@@ -99,6 +99,29 @@ entity:
     #   - "Acme Fabrication"
     #   - "Acme Fab Services"
 
+  # How alike two counterparty names have to read before a person is asked
+  # whether they are the same party.
+  #
+  # The exact rules above catch a name that changed its *shape* -- extra
+  # parties, a different legal form. They do not catch a name that changed its
+  # *spelling*: "Acme Fabrication Svcs" shares no whole token with
+  # "Acme Fabrication Services LLC" beyond the first two, so containment fails
+  # and the pile would quietly acquire a second engagement holding half the
+  # documents. Every disagreement between the two halves then stops being found,
+  # and the register looks clean because it is only ever comparing a document
+  # with itself.
+  #
+  # Above this similarity the document is ESCALATED, never merged. A score is
+  # evidence that a question exists; it is not an answer, and an automatic merge
+  # would corrupt the register in the way that is hardest to spot afterwards.
+  #
+  # Raise it for a pile of related subsidiaries whose names legitimately look
+  # alike; lower it for a pile of unrelated vendors where a false escalation
+  # costs less than a missed one. Set it to 1.1 to switch the step off, which is
+  # a defensible choice for a pile with one counterparty and an honest one to
+  # make explicitly rather than by deleting the feature.
+  near_match_similarity: 0.55
+
 # The field that says when a document's terms take effect. Used only to break a
 # tie between documents of equal authority -- two amendments both outrank the
 # agreement they amend, so type alone cannot say which governs, but the later
