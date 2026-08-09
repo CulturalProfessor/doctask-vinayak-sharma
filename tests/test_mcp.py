@@ -188,6 +188,8 @@ def test_every_operation_is_reachable_from_the_machine_interface():
         "list_piles": "doctask_list_piles",
         "create_pile": "doctask_create_pile",
         "list_documents": "doctask_list_documents",
+        "corpora": "doctask_list_corpora",
+        "upload": "doctask_upload_document",
         "start_run": "doctask_start_run",
         "arrival": "doctask_document_arrived",
         "get_run": "doctask_get_run",
@@ -200,6 +202,9 @@ def test_every_operation_is_reachable_from_the_machine_interface():
         "register": "doctask_get_register",
         "findings": "doctask_get_findings",
         "audit": "doctask_get_audit",
+        "search": "doctask_search_sources",
+        "entities": "doctask_list_entities",
+        "watch_status": "doctask_watch_status",
     }
     operations = {name for name in ops.__all__ if not name[0].isupper()}
     assert set(expected) == operations, (

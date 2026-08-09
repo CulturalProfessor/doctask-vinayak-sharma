@@ -19,6 +19,19 @@ services:
 
   api:
     build: .
+    # Documents uploaded through the UI are written into the bind-mounted
+    # corpora/ below, and the container writes them as root, so on the host they
+    # end up owned by root and need sudo to delete. Setting DOCTASK_UID and
+    # DOCTASK_GID to your own ids fixes that:
+    #
+    #     DOCTASK_UID=$(id -u) DOCTASK_GID=$(id -g) docker compose up
+    #
+    # It is opt-in and defaults to the current behaviour on purpose. Guessing an
+    # id wrong makes corpora/ unwritable and breaks uploads and the watched
+    # folder outright, which is a much worse failure than a file that is
+    # awkward to delete -- and "a stranger can run it with one command" is not
+    # something to trade away for tidier file ownership.
+    user: "${DOCTASK_UID:-0}:${DOCTASK_GID:-0}"
     depends_on:
       db:
         condition: service_healthy
@@ -26,7 +39,15 @@ services:
       DATABASE_URL: postgresql://postgres:postgres@db:5432/doctask
       LLM_PROVIDER: ${LLM_PROVIDER:-fake}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      # The watched location. On here and off by default elsewhere: a
+      # background loop that dispatches runs is a surprise in a test process
+      # and the feature in a running deployment. Drop a file into
+      # corpora/inbox/ on the host and it lands in the `acme` pile as a
+      # targeted update, halted at the gate like every other arrival.
+      WATCH_ENABLED: ${WATCH_ENABLED:-true}
       WATCH_DIR: /app/corpora/inbox
+      WATCH_PILE: ${WATCH_PILE:-acme}
+      WATCH_INTERVAL_SECONDS: ${WATCH_INTERVAL_SECONDS:-3}
     ports:
       # 8000 is the default for half the Python web world, so this project
       # claims 8010 on the host. Override with API_PORT if that clashes too.

@@ -152,3 +152,27 @@ def findings(pile_id: str, outcome: str | None = None) -> dict:
 def audit(pile_id: str) -> dict:
     """What changed, when, and because of which source."""
     return _translate(lambda: ops.audit(pile_id))
+
+
+@router.get("/piles/{pile_id}/search")
+def search(pile_id: str, q: str, limit: int = 8) -> dict:
+    """Vector search over the pile's spans. Sources, not answers."""
+    return _translate(lambda: ops.search(pile_id, q, limit))
+
+
+@router.get("/piles/{pile_id}/entities")
+def entities(pile_id: str) -> dict:
+    """The engagements this pile knows, and the names it knows them by."""
+    return _translate(lambda: ops.entities(pile_id))
+
+
+@router.get("/corpora")
+def corpora() -> dict:
+    """The folders and files available to read — so no caller types a path."""
+    return _translate(ops.corpora)
+
+
+@router.get("/watch")
+def watch() -> dict:
+    """The watched location: whether it is running, and what has come through."""
+    return _translate(ops.watch_status)

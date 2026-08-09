@@ -14,6 +14,8 @@ Nothing failed; the number was just a lie, in the place a reviewer looks first.
 """
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from app import operations as ops
@@ -151,3 +153,112 @@ def test_the_pending_count_falls_as_the_review_happens(pile):
     row = ops.list_runs(pile)["runs"][0]
     assert row["pending_proposals"] == len(proposals) - 1
     assert row["proposals"] == len(proposals)
+
+
+# ------------------------------------------------------- what can be read --
+
+def test_the_corpora_listing_offers_what_is_actually_there():
+    """`start_run` takes a folder and `arrival` takes a file path, and until
+    this existed the only way to learn either was to already know it.
+
+    Needs no pile: what is on disk is not a property of any pile, and a caller
+    choosing what to read has not chosen a pile to read it into yet.
+    """
+    body = ops.corpora()
+    names = {f["name"] for f in body["folders"]}
+    assert {"pile_acme", "pile_northwind", "arrivals"} <= names
+
+    acme = next(f for f in body["folders"] if f["name"] == "pile_acme")
+    assert acme["files"] == acme["readable"] == 7
+
+    # Every path is exactly what the operation it feeds will accept.
+    paths = {f["path"] for f in body["files"]}
+    assert "arrivals/amendment_02.md" in paths
+    assert all(not p.startswith("/") for p in paths)
+
+
+def test_a_file_that_cannot_be_read_is_listed_and_marked_rather_than_hidden():
+    """A picker that silently omits a document leaves someone hunting for a file
+    that is right there. The same rule ingest follows for a format it refuses:
+    a gap is output, not something to quietly drop.
+
+    `pile_northwind/rate_card_2026.csv` is the case in this repo -- a real
+    document in a real corpus that this system does not read.
+    """
+    body = ops.corpora()
+    csv = next(f for f in body["files"] if f["path"].endswith("rate_card_2026.csv"))
+    assert csv["supported"] is False
+    assert csv["format"] is None
+    assert "csv" in (csv["note"] or ""), "the reason has to travel with the file"
+
+    # And the folder's own count says so, so a caller sees it before opening it.
+    northwind = next(f for f in body["folders"] if f["name"] == "pile_northwind")
+    assert northwind["readable"] < northwind["files"]
+
+
+# ----------------------------------------------------------- sent documents --
+
+def test_an_uploaded_document_is_stored_and_actually_read(pile):
+    """Uploading and having the document read are one intention, not two.
+
+    The endpoint behind this used to store the bytes and stop, which returned a
+    success response for a document that never became a fact, never reached the
+    register and never appeared for review, and nothing said so. The claim worth
+    testing is that an upload produces a run holding items for a person.
+
+    It sends the bytes of a document the recordings already cover, under its own
+    name: a suite that invented a contract here would only prove that the fake
+    provider fails loudly, which is a different test and one that already exists.
+    """
+    from tests.conftest import CORPORA
+
+    source = CORPORA / "arrivals" / "amendment_02.md"
+    result = ops.upload(pile, source.name, source.read_bytes())
+    stored = ops.CORPORA / result["stored_as"]
+    try:
+        assert result["stored_as"].startswith("uploads/")
+        assert result["bytes"] == source.stat().st_size
+        # It went through `arrival`, so it has a run and stopped for a person.
+        assert result["run_id"]
+        assert result["status"] in ("awaiting_approval", "no_change")
+        assert stored.is_file() and stored.read_bytes() == source.read_bytes()
+    finally:
+        stored.unlink(missing_ok=True)
+
+
+def test_a_filename_that_climbs_out_of_the_corpus_cannot(tmp_path):
+    """One of the surfaces this sits behind is driven by a model reading
+    documents that may themselves contain instructions, so a caller-supplied
+    filename is never trusted as a path.
+
+    It is neutralised rather than refused: only the last part of the name is
+    kept, so `../../etc/passwd` becomes a document called `passwd` inside the
+    uploads folder. Refusing outright would be surprising for a legitimately odd
+    filename, and the response says exactly where the bytes went either way.
+    """
+    landed = ops._free_path(ops.UPLOADS / Path("../../etc/passwd").name, b"x")
+    assert landed.parent == ops.UPLOADS
+    assert ops.UPLOADS in landed.parents or landed.parent == ops.UPLOADS
+    assert "etc" not in str(landed.relative_to(ops.CORPORA))
+
+
+def test_a_name_already_taken_by_different_bytes_is_never_overwritten(tmp_path):
+    """A document already in a pile is cited by character offsets into the text
+    that was read from it. Replacing the file underneath would leave every
+    citation pointing at a document that no longer says what was quoted: the
+    register stays internally consistent and stops being checkable, which is the
+    worse of the two failures.
+
+    A pure test of the naming rule, with no run behind it, because the rule is
+    what has to hold.
+    """
+    first, second = b"sixty (60) days", b"ninety (90) days"
+    target = tmp_path / "clash.md"
+    target.write_bytes(first)
+
+    assert ops._free_path(target, first) == target, "same bytes reuse the file"
+
+    moved = ops._free_path(target, second)
+    assert moved != target
+    assert moved.name.startswith("clash-") and moved.suffix == ".md"
+    assert target.read_bytes() == first, "the document already there is untouched"

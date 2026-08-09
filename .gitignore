@@ -18,6 +18,12 @@ node_modules/
 web/dist/
 web/.vite/
 
+# Documents someone uploaded through the UI or the MCP surface. These may be
+# real contracts belonging to whoever is running this, and nobody's real
+# paperwork belongs in this repository.
+corpora/uploads/*
+!corpora/uploads/.gitkeep
+
 .runs/
 exports/
 *.sqlite
