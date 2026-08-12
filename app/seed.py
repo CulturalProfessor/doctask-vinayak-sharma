@@ -4,10 +4,10 @@ Idempotent by construction: it ingests the same corpora every time and, because
 ingest is content-addressed, a second run reports every document as a duplicate
 and changes nothing. Running this on every container start is therefore safe.
 """
+
 from __future__ import annotations
 
 import sys
-from pathlib import Path
 
 from app.ingest.ingest import ensure_pile, ingest_directory
 from app.settings import REPO_ROOT

@@ -13,6 +13,7 @@ original layout, so a PDF span is honest at page granularity plus offsets into
 the extracted page text. That limitation is declared in the README rather than
 papered over.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -21,9 +22,12 @@ from pathlib import Path
 SUPPORTED = ("txt", "md", "html", "pdf", "docx")
 
 _EXT = {
-    ".txt": "txt", ".text": "txt",
-    ".md": "md", ".markdown": "md",
-    ".html": "html", ".htm": "html",
+    ".txt": "txt",
+    ".text": "txt",
+    ".md": "md",
+    ".markdown": "md",
+    ".html": "html",
+    ".htm": "html",
     ".pdf": "pdf",
     ".docx": "docx",
 }
@@ -52,9 +56,7 @@ def detect_format(path: Path, data: bytes | None = None) -> str:
             return "docx"
     fmt = _EXT.get(path.suffix.lower())
     if fmt is None:
-        raise UnsupportedFormat(
-            f"{path.name}: extension {path.suffix!r} is not one of {SUPPORTED}"
-        )
+        raise UnsupportedFormat(f"{path.name}: extension {path.suffix!r} is not one of {SUPPORTED}")
     return fmt
 
 

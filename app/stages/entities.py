@@ -54,25 +54,44 @@ same state gives the same answer on every run.
 `near_match` is injected rather than imported so this module stays a pure
 function of its arguments and keeps its tests free of a database.
 """
+
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable, Protocol
+from typing import Protocol
 
 _NON_WORD = re.compile(r"[^a-z0-9]+")
 
 # Legal-form noise that varies between documents describing the same company.
 DEFAULT_STOPWORDS = {
-    "inc", "incorporated", "llc", "llp", "ltd", "limited", "corp", "corporation",
-    "co", "company", "plc", "gmbh", "sa", "sas", "bv", "nv", "pty", "and", "the",
+    "inc",
+    "incorporated",
+    "llc",
+    "llp",
+    "ltd",
+    "limited",
+    "corp",
+    "corporation",
+    "co",
+    "company",
+    "plc",
+    "gmbh",
+    "sa",
+    "sas",
+    "bv",
+    "nv",
+    "pty",
+    "and",
+    "the",
 }
 
 
 @dataclass
 class EntityResolution:
     entity_key: str | None
-    method: str          # alias | exact | contains | near | new | ambiguous
+    method: str  # alias | exact | contains | near | new | ambiguous
     confident: bool = True
     candidates: list[str] = field(default_factory=list)
     note: str | None = None
@@ -124,28 +143,32 @@ def significant_tokens(value: str, stopwords: set[str] | None = None) -> set[str
     one-party one.
     """
     stops = DEFAULT_STOPWORDS if stopwords is None else stopwords
-    return {t for t in _NON_WORD.sub(" ", (value or "").casefold()).split()
-            if t and t not in stops}
+    return {t for t in _NON_WORD.sub(" ", (value or "").casefold()).split() if t and t not in stops}
 
 
-def resolve_entity(candidate: str, known_keys: list[str], template: str,
-                   cfg: dict | None = None,
-                   near_match: NearMatch | Callable[[str], dict | None] | None = None,
-                   ) -> EntityResolution:
+def resolve_entity(
+    candidate: str,
+    known_keys: list[str],
+    template: str,
+    cfg: dict | None = None,
+    near_match: NearMatch | Callable[[str], dict | None] | None = None,
+) -> EntityResolution:
     """Resolve a counterparty name to an engagement key."""
     cfg = cfg or {}
     stopwords = set(cfg.get("stopwords", DEFAULT_STOPWORDS))
     if not (candidate or "").strip():
-        return EntityResolution(None, "new", confident=False,
-                                note="no counterparty named in the document")
+        return EntityResolution(
+            None, "new", confident=False, note="no counterparty named in the document"
+        )
 
     def key_for(slug: str) -> str:
         return template.replace("{counterparty_slug}", slug)
 
     # 1. A configured alias is an explicit human decision and outranks inference.
     for canonical, spellings in (cfg.get("aliases") or {}).items():
-        if any(slugify(s) == slugify(candidate) for s in spellings) \
-                or slugify(canonical) == slugify(candidate):
+        if any(slugify(s) == slugify(candidate) for s in spellings) or slugify(
+            canonical
+        ) == slugify(candidate):
             return EntityResolution(key_for(slugify(canonical)), "alias")
 
     candidate_key = key_for(slugify(candidate))
@@ -164,18 +187,26 @@ def resolve_entity(candidate: str, known_keys: list[str], template: str,
 
     if len(matches) == 1:
         return EntityResolution(
-            matches[0], "contains",
-            note=(f"{candidate!r} names the existing engagement plus additional "
-                  f"parties; attached to {matches[0]}"),
+            matches[0],
+            "contains",
+            note=(
+                f"{candidate!r} names the existing engagement plus additional "
+                f"parties; attached to {matches[0]}"
+            ),
         )
     if len(matches) > 1:
         # Picking one would corrupt the register; creating a third would hide
         # every conflict. Neither is ours to choose.
         return EntityResolution(
-            None, "ambiguous", confident=False, candidates=matches,
-            note=(f"{candidate!r} names {len(matches)} known engagements "
-                  f"({', '.join(matches)}); a person must say which one this "
-                  f"document belongs to"),
+            None,
+            "ambiguous",
+            confident=False,
+            candidates=matches,
+            note=(
+                f"{candidate!r} names {len(matches)} known engagements "
+                f"({', '.join(matches)}); a person must say which one this "
+                f"document belongs to"
+            ),
         )
 
     # 4. Nothing lexical matched. Before declaring a second engagement -- the
@@ -191,17 +222,23 @@ def resolve_entity(candidate: str, known_keys: list[str], template: str,
         if hit and hit.get("entity_key") and hit["entity_key"] != candidate_key:
             similarity = float(hit.get("similarity") or 0.0)
             return EntityResolution(
-                None, "near", confident=False, candidates=[hit["entity_key"]],
+                None,
+                "near",
+                confident=False,
+                candidates=[hit["entity_key"]],
                 similarity=round(similarity, 4),
-                note=(f"{candidate!r} does not match any known engagement by "
-                      f"name, but reads like {hit.get('name') or hit['entity_key']!r} "
-                      f"({hit['entity_key']}, similarity {similarity:.2f}). "
-                      f"Treating it as a new engagement would split the pile and "
-                      f"hide every disagreement between the two; merging them is "
-                      f"not something a similarity score can decide. A person "
-                      f"must say whether this is the same party."),
+                note=(
+                    f"{candidate!r} does not match any known engagement by "
+                    f"name, but reads like {hit.get('name') or hit['entity_key']!r} "
+                    f"({hit['entity_key']}, similarity {similarity:.2f}). "
+                    f"Treating it as a new engagement would split the pile and "
+                    f"hide every disagreement between the two; merging them is "
+                    f"not something a similarity score can decide. A person "
+                    f"must say whether this is the same party."
+                ),
             )
 
     # 5. Genuinely new, by every test available.
-    return EntityResolution(candidate_key, "new",
-                            note=f"no existing engagement matches {candidate!r}")
+    return EntityResolution(
+        candidate_key, "new", note=f"no existing engagement matches {candidate!r}"
+    )

@@ -15,6 +15,7 @@ give the system orders, and one in a format the system refuses -- plus a `.docx`
 so a format the README claims support for is exercised end to end rather than
 only in a unit test.
 """
+
 from __future__ import annotations
 
 import uuid
@@ -56,6 +57,7 @@ def outcomes(pile_id: str) -> dict[str, set[str]]:
 
 # ------------------------------------------------------- the pile itself --
 
+
 def test_the_second_corpus_runs_offline_with_no_key(piles):
     """Behaviour 7, on documents whose recordings were made later than the rest.
     If this needs a network it will say so by failing, not by being slow."""
@@ -79,20 +81,24 @@ def test_the_answers_are_not_the_same_answers(piles):
     north = outcomes(piles["northwind"][0])
     acme = outcomes(piles["acme"][0])
 
-    assert north["violated"] == acme["satisfied"], (
-        "every rule acme satisfies is a rule northwind breaks"
-    )
-    assert north["satisfied"] == acme["violated"], (
-        "and every rule acme breaks is a rule northwind satisfies"
-    )
+    assert (
+        north["violated"] == acme["satisfied"]
+    ), "every rule acme satisfies is a rule northwind breaks"
+    assert (
+        north["satisfied"] == acme["violated"]
+    ), "and every rule acme breaks is a rule northwind satisfies"
     assert north["violated"] == {
-        "invoice_within_term", "liability_cap_present", "no_instructions_in_sources",
+        "invoice_within_term",
+        "liability_cap_present",
+        "no_instructions_in_sources",
     }
     # The one rule neither pile can answer, because no extraction schema asks
     # for the field. Same on both, and honestly reported on both.
-    assert north["not_enough_evidence"] == acme["not_enough_evidence"] == {
-        "amendment_references_parent"
-    }
+    assert (
+        north["not_enough_evidence"]
+        == acme["not_enough_evidence"]
+        == {"amendment_references_parent"}
+    )
 
 
 def test_a_disagreement_is_not_automatically_a_violation(piles):
@@ -108,8 +114,9 @@ def test_a_disagreement_is_not_automatically_a_violation(piles):
     pile_id, run = piles["northwind"]
     assert run["conflicts"] == 1
 
-    conflicts = [p for p in ops.list_proposals(run["run_id"])["proposals"]
-                 if p["kind"] == "conflict"]
+    conflicts = [
+        p for p in ops.list_proposals(run["run_id"])["proposals"] if p["kind"] == "conflict"
+    ]
     assert [c["payload"]["field"] for c in conflicts] == ["hourly_rate"]
     assert set(conflicts[0]["payload"]["values"]) == {"USD 110.00", "USD 95.00"}
 
@@ -118,6 +125,7 @@ def test_a_disagreement_is_not_automatically_a_violation(piles):
 
 
 # ------------------------------------------- documents that never got read --
+
 
 def test_a_document_that_gives_orders_is_quarantined_and_reported(piles):
     """Behaviour 8, reached through a full run rather than a unit test.
@@ -129,8 +137,11 @@ def test_a_document_that_gives_orders_is_quarantined_and_reported(piles):
     pile_id, run = piles["northwind"]
     assert run["quarantined"] == ["vendor_letter.md"]
 
-    violated = [f for f in ops.findings(pile_id)["findings"]
-                if f["rule_key"] == "no_instructions_in_sources"]
+    violated = [
+        f
+        for f in ops.findings(pile_id)["findings"]
+        if f["rule_key"] == "no_instructions_in_sources"
+    ]
     assert violated and violated[0]["outcome"] == "violated"
     assert "vendor_letter.md" in violated[0]["detail"]
 
@@ -154,9 +165,11 @@ def test_the_register_says_which_documents_it_did_not_read(piles):
     corpus existed it only ever listed missing *fields*. Two documents sat in
     the pile, unread, and the deliverable was silent about both."""
     _, run = piles["northwind"]
-    gaps = next(p for p in ops.list_proposals(run["run_id"])["proposals"]
-                if p["kind"] == "section_patch"
-                and p["payload"]["section_key"] == "gaps")
+    gaps = next(
+        p
+        for p in ops.list_proposals(run["run_id"])["proposals"]
+        if p["kind"] == "section_patch" and p["payload"]["section_key"] == "gaps"
+    )
     body = gaps["payload"]["body"]
 
     assert "rate_card_2026.csv" in body and "format is not supported" in body
@@ -167,6 +180,7 @@ def test_the_register_says_which_documents_it_did_not_read(piles):
 
 
 # ---------------------------------------------------------------- formats --
+
 
 def test_a_docx_is_read_with_exact_offsets(conn, piles):
     """The README claims docx support. Acme's corpus is markdown, text and html,
@@ -179,13 +193,17 @@ def test_a_docx_is_read_with_exact_offsets(conn, piles):
     from_docx = [f for f in facts if f.document.endswith(".docx")]
     assert {f.field for f in from_docx} >= {"notice_period_days", "notice_type"}
 
-    page = fetch_one(conn, """
+    page = fetch_one(
+        conn,
+        """
         SELECT p.text FROM page p JOIN document d ON d.id = p.document_id
         WHERE d.pile_id = %s AND d.filename = %s AND p.page_no = 1
-    """, (pile_id, "notice_nonrenewal.docx"))["text"]
+    """,
+        (pile_id, "notice_nonrenewal.docx"),
+    )["text"]
 
     for sourced in from_docx:
         span = sourced.fact.span
-        assert page[span.char_start:span.char_end] == span.text, (
-            f"{sourced.field}: the offsets do not land on the quoted text"
-        )
+        assert (
+            page[span.char_start : span.char_end] == span.text
+        ), f"{sourced.field}: the offsets do not land on the quoted text"

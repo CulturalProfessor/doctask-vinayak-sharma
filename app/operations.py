@@ -20,6 +20,7 @@ what.
 Errors are domain exceptions, not HTTP status codes. A surface translates them;
 `PileBusy` becoming 409 is a fact about HTTP, not a fact about a busy pile.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -58,11 +59,32 @@ class Finished(Invalid):
 
 
 __all__ = [
-    "NotFound", "Invalid", "Finished", "PileBusy", "SourceUnavailable",
-    "list_piles", "create_pile", "list_documents", "corpora", "upload",
-    "start_run", "arrival", "get_run", "list_runs", "list_proposals", "decide",
-    "commit", "resume", "abandon", "run_report", "register", "audit", "findings",
-    "search", "entities", "watch_status",
+    "Finished",
+    "Invalid",
+    "NotFound",
+    "PileBusy",
+    "SourceUnavailable",
+    "abandon",
+    "arrival",
+    "audit",
+    "commit",
+    "corpora",
+    "create_pile",
+    "decide",
+    "entities",
+    "findings",
+    "get_run",
+    "list_documents",
+    "list_piles",
+    "list_proposals",
+    "list_runs",
+    "register",
+    "resume",
+    "run_report",
+    "search",
+    "start_run",
+    "upload",
+    "watch_status",
 ]
 
 
@@ -83,13 +105,19 @@ GAP_STATUSES = ("quarantined", "unsupported")
 
 def list_piles() -> dict[str, Any]:
     with transaction() as conn:
-        return {"piles": fetch_all(conn, """
+        return {
+            "piles": fetch_all(
+                conn,
+                """
             SELECT p.id, p.name, p.domain, p.created_at,
                    count(d.id) FILTER (WHERE NOT (d.status = ANY(%s))) AS documents,
                    count(d.id) FILTER (WHERE d.status = ANY(%s))       AS gaps
             FROM pile p LEFT JOIN document d ON d.pile_id = p.id
             GROUP BY p.id ORDER BY p.name
-        """, (list(GAP_STATUSES), list(GAP_STATUSES)))}
+        """,
+                (list(GAP_STATUSES), list(GAP_STATUSES)),
+            )
+        }
 
 
 def create_pile(name: str, domain: str = "vendor_contracts") -> dict[str, Any]:
@@ -97,8 +125,7 @@ def create_pile(name: str, domain: str = "vendor_contracts") -> dict[str, Any]:
 
     _config(domain)
     with transaction() as conn:
-        return {"pile_id": ensure_pile(conn, name, domain), "name": name,
-                "domain": domain}
+        return {"pile_id": ensure_pile(conn, name, domain), "name": name, "domain": domain}
 
 
 # --------------------------------------------------------------- corpora --
@@ -133,8 +160,9 @@ def corpora() -> dict[str, Any]:
         return {"root": "corpora", "folders": [], "files": []}
 
     for directory in sorted(p for p in CORPORA.iterdir() if p.is_dir()):
-        entries = sorted(p for p in directory.rglob("*") if p.is_file()
-                         and not p.name.startswith("."))
+        entries = sorted(
+            p for p in directory.rglob("*") if p.is_file() and not p.name.startswith(".")
+        )
         readable = 0
         for path in entries[:MAX_CORPORA_ENTRIES]:
             try:
@@ -144,20 +172,24 @@ def corpora() -> dict[str, Any]:
                 fmt, note = None, str(exc)
             if fmt:
                 readable += 1
-            files.append({
-                "path": str(path.relative_to(CORPORA)),
-                "folder": directory.name,
-                "name": path.name,
-                "bytes": path.stat().st_size,
-                "format": fmt,
-                "supported": fmt is not None,
-                "note": note,
-            })
-        folders.append({
-            "name": directory.name,
-            "files": len(entries),
-            "readable": readable,
-        })
+            files.append(
+                {
+                    "path": str(path.relative_to(CORPORA)),
+                    "folder": directory.name,
+                    "name": path.name,
+                    "bytes": path.stat().st_size,
+                    "format": fmt,
+                    "supported": fmt is not None,
+                    "note": note,
+                }
+            )
+        folders.append(
+            {
+                "name": directory.name,
+                "files": len(entries),
+                "readable": readable,
+            }
+        )
 
     return {"root": "corpora", "folders": folders, "files": files}
 
@@ -179,8 +211,9 @@ UPLOADS = CORPORA / "uploads"
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024
 
 
-def upload(pile_id: str, filename: str, data: bytes,
-           domain: str = "vendor_contracts") -> dict[str, Any]:
+def upload(
+    pile_id: str, filename: str, data: bytes, domain: str = "vendor_contracts"
+) -> dict[str, Any]:
     """Take a document from the caller's machine, store it, and read it.
 
     One operation rather than two because "the file is uploaded" and "the file
@@ -197,8 +230,10 @@ def upload(pile_id: str, filename: str, data: bytes,
     if not data:
         raise Invalid(f"{name} is empty")
     if len(data) > MAX_UPLOAD_BYTES:
-        raise Invalid(f"{name} is {len(data) // 1024 // 1024} MB; the limit is "
-                      f"{MAX_UPLOAD_BYTES // 1024 // 1024} MB")
+        raise Invalid(
+            f"{name} is {len(data) // 1024 // 1024} MB; the limit is "
+            f"{MAX_UPLOAD_BYTES // 1024 // 1024} MB"
+        )
 
     UPLOADS.mkdir(parents=True, exist_ok=True)
     target = _free_path(UPLOADS / name, data)
@@ -206,8 +241,7 @@ def upload(pile_id: str, filename: str, data: bytes,
         target.write_bytes(data)
 
     result = arrival(pile_id, str(target.relative_to(CORPORA)), domain)
-    return {"stored_as": str(target.relative_to(CORPORA)),
-            "bytes": len(data), **result}
+    return {"stored_as": str(target.relative_to(CORPORA)), "bytes": len(data), **result}
 
 
 def _free_path(preferred: Path, data: bytes) -> Path:
@@ -232,7 +266,11 @@ def _free_path(preferred: Path, data: bytes) -> Path:
 def list_documents(pile_id: str) -> dict[str, Any]:
     _require_pile(pile_id)
     with transaction() as conn:
-        return {"pile_id": pile_id, "documents": fetch_all(conn, """
+        return {
+            "pile_id": pile_id,
+            "documents": fetch_all(
+                conn,
+                """
             SELECT d.id, d.filename, d.format, d.doc_type, d.status, d.ingest_note,
                    d.byte_size, d.ingested_at, count(pg.id) AS pages,
                    -- Answered here rather than by each surface, so that HTTP,
@@ -242,18 +280,22 @@ def list_documents(pile_id: str) -> dict[str, Any]:
             FROM document d LEFT JOIN page pg ON pg.document_id = d.id
             WHERE d.pile_id = %s
             GROUP BY d.id ORDER BY d.filename
-        """, (list(GAP_STATUSES), pile_id))}
+        """,
+                (list(GAP_STATUSES), pile_id),
+            ),
+        }
 
 
 # -------------------------------------------------------------------- runs --
 
-def start_run(pile_id: str, corpus: str = "pile_acme",
-              domain: str = "vendor_contracts") -> dict[str, Any]:
+
+def start_run(
+    pile_id: str, corpus: str = "pile_acme", domain: str = "vendor_contracts"
+) -> dict[str, Any]:
     """Ingest, understand, and halt at the gate. Commits nothing."""
     cfg = _config(domain)
     directory = _under_corpora(corpus)
-    paths = sorted(p for p in directory.glob("*") if p.is_file()) \
-        if directory.is_dir() else []
+    paths = sorted(p for p in directory.glob("*") if p.is_file()) if directory.is_dir() else []
     if not paths:
         raise Invalid(f"no documents in corpora/{corpus}")
     _require_pile(pile_id)
@@ -261,8 +303,7 @@ def start_run(pile_id: str, corpus: str = "pile_acme",
     return _summarise(pipeline.run_understand(get_provider(), cfg, pile_id, paths))
 
 
-def arrival(pile_id: str, document: str,
-            domain: str = "vendor_contracts") -> dict[str, Any]:
+def arrival(pile_id: str, document: str, domain: str = "vendor_contracts") -> dict[str, Any]:
     """A document lands. Produces a targeted update, and halts at the gate."""
     cfg = _config(domain)
     path = _under_corpora(document)
@@ -313,11 +354,15 @@ def abandon(run_id: str, abandoned_by: str, reason: str) -> dict[str, Any]:
     underneath, and neither is writing anything.
     """
     if not str(abandoned_by or "").strip():
-        raise Invalid("abandoned_by is required: ending a run is a decision, "
-                      "and a decision has to have a decider")
+        raise Invalid(
+            "abandoned_by is required: ending a run is a decision, "
+            "and a decision has to have a decider"
+        )
     if not str(reason or "").strip():
-        raise Invalid("a reason is required: a run that ends with no explanation "
-                      "is a gap in the record of the pile")
+        raise Invalid(
+            "a reason is required: a run that ends with no explanation "
+            "is a gap in the record of the pile"
+        )
 
     with transaction() as conn:
         run = _require_open_run(conn, run_id, "abandoned")
@@ -338,10 +383,15 @@ def abandon(run_id: str, abandoned_by: str, reason: str) -> dict[str, Any]:
         # operation returned success and changed nothing.
         conn.commit()
 
-    return {"run_id": run_id, "status": "abandoned", "abandoned_by": abandoned_by.strip(),
-            "reason": reason.strip(), "left_undecided": pending,
-            "kept": "everything this run wrote: its facts, its costs and its "
-                    "proposals are still here and still attributed to it"}
+    return {
+        "run_id": run_id,
+        "status": "abandoned",
+        "abandoned_by": abandoned_by.strip(),
+        "reason": reason.strip(),
+        "left_undecided": pending,
+        "kept": "everything this run wrote: its facts, its costs and its "
+        "proposals are still here and still attributed to it",
+    }
 
 
 def get_run(run_id: str) -> dict[str, Any]:
@@ -374,15 +424,16 @@ def run_report(run_id: str) -> dict[str, Any]:
 
 # -------------------------------------------------------------- the gate --
 
+
 def list_proposals(run_id: str, status: str | None = None) -> dict[str, Any]:
     with transaction() as conn:
         _require_run(conn, run_id)
-        return {"run_id": run_id,
-                "proposals": repo.list_proposals(conn, run_id, status)}
+        return {"run_id": run_id, "proposals": repo.list_proposals(conn, run_id, status)}
 
 
-def decide(run_id: str, decisions: list[dict[str, Any]], decided_by: str,
-           decided_via: str = "direct") -> dict[str, Any]:
+def decide(
+    run_id: str, decisions: list[dict[str, Any]], decided_by: str, decided_via: str = "direct"
+) -> dict[str, Any]:
     """Approve and reject individual items in one review.
 
     Mixed decisions in a single call are the normal case, not a special one.
@@ -406,10 +457,14 @@ def decide(run_id: str, decisions: list[dict[str, Any]], decided_by: str,
     with transaction() as conn:
         _require_open_run(conn, run_id, "reviewed")
         counts = gate_module.decide(
-            conn, run_id,
-            [Decision(str(d["proposal_id"]), bool(d["approved"]), d.get("reason"))
-             for d in decisions],
-            decided_by=decided_by, decided_via=decided_via,
+            conn,
+            run_id,
+            [
+                Decision(str(d["proposal_id"]), bool(d["approved"]), d.get("reason"))
+                for d in decisions
+            ],
+            decided_by=decided_by,
+            decided_via=decided_via,
         )
         remaining = len(repo.list_proposals(conn, run_id, status="pending"))
     # `ignored` means a proposal was already decided. Reported rather than
@@ -423,14 +478,17 @@ def commit(run_id: str) -> dict[str, Any]:
         _require_open_run(conn, run_id, "committed")
         pending = len(repo.list_proposals(conn, run_id, status="pending"))
     if pending:
-        raise Invalid(f"{pending} proposal(s) still pending; a run cannot commit "
-                      f"while any item is undecided")
+        raise Invalid(
+            f"{pending} proposal(s) still pending; a run cannot commit "
+            f"while any item is undecided"
+        )
 
     result = _resume(run_id)
     return {"run_id": run_id, "status": result.status, **(result.committed or {})}
 
 
 # ------------------------------------------------------------- the output --
+
 
 def register(pile_id: str, version: int | None = None) -> dict[str, Any]:
     with transaction() as conn:
@@ -517,14 +575,21 @@ def search(pile_id: str, query: str, limit: int = 8) -> dict[str, Any]:
     limit = max(1, min(int(limit), MAX_SEARCH_RESULTS))
 
     with transaction() as conn:
-        hits = retrieval.search_spans(conn, pile_id, text, limit=limit,
-                                      min_similarity=MIN_SEARCH_SIMILARITY)
+        hits = retrieval.search_spans(
+            conn, pile_id, text, limit=limit, min_similarity=MIN_SEARCH_SIMILARITY
+        )
         index = retrieval.index_status(conn, pile_id)
-    return {"pile_id": pile_id, "query": text, "results": hits,
-            "index": index,
-            "note": ("similarity search over span text; these are sources, not "
-                     "an answer, and an empty result is weak evidence of absence "
-                     "because the embedder matches wording rather than meaning")}
+    return {
+        "pile_id": pile_id,
+        "query": text,
+        "results": hits,
+        "index": index,
+        "note": (
+            "similarity search over span text; these are sources, not "
+            "an answer, and an empty result is weak evidence of absence "
+            "because the embedder matches wording rather than meaning"
+        ),
+    }
 
 
 def entities(pile_id: str) -> dict[str, Any]:
@@ -542,6 +607,7 @@ def entities(pile_id: str) -> dict[str, Any]:
 
 # ----------------------------------------------------------- the watcher --
 
+
 def watch_status() -> dict[str, Any]:
     """What the watched location is, and what has arrived through it.
 
@@ -556,6 +622,7 @@ def watch_status() -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------- shared --
+
 
 def _resume(run_id: str) -> pipeline.RunResult:
     """Resume, translating the pipeline's vocabulary into this module's.
@@ -577,7 +644,7 @@ def _config(domain: str):
     try:
         return load_domain(domain)
     except ConfigError as exc:
-        raise Invalid(str(exc))
+        raise Invalid(str(exc)) from exc
 
 
 def _require_pile(pile_id: str) -> None:
@@ -614,9 +681,11 @@ def _require_open_run(conn, run_id: str, verb: str) -> dict[str, Any]:
     if status == "abandoned":
         who = run.get("abandoned_by") or "someone"
         why = run.get("abandon_reason") or "no reason recorded"
-        raise Finished(f"this run was abandoned by {who} ({why}) and cannot be {verb}. "
-                       f"Everything it wrote is still here; read the pile again to "
-                       f"start fresh work.")
+        raise Finished(
+            f"this run was abandoned by {who} ({why}) and cannot be {verb}. "
+            f"Everything it wrote is still here; read the pile again to "
+            f"start fresh work."
+        )
     raise Finished(f"this run is {status} and cannot be {verb}")
 
 
@@ -654,8 +723,7 @@ def _summarise(result: pipeline.RunResult) -> dict[str, Any]:
         # the one outcome that needs a human into the one outcome nobody can
         # act on.
         "escalated": [
-            {"document": row["document"], "stage": row.get("stage"),
-             "note": row.get("note") or ""}
+            {"document": row["document"], "stage": row.get("stage"), "note": row.get("note") or ""}
             for row in result.escalated
         ],
         "changed": result.delta.changed,

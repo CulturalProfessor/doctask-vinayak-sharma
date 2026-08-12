@@ -1,6 +1,7 @@
 """Configuration over code is a graded property, so the config loader gets the
 same scrutiny as the code: it must load the real domain, and it must refuse a
 broken one loudly rather than failing three stages into a run."""
+
 from __future__ import annotations
 
 import pytest
@@ -33,9 +34,7 @@ def test_an_invoice_never_outranks_the_agreement_it_bills_against():
     cfg = load_domain("vendor_contracts")
     assert cfg.precedence_of("invoice") < cfg.precedence_of("msa")
     assert cfg.precedence_of("invoice") < cfg.precedence_of("amendment")
-    assert cfg.precedence_of("invoice") == min(
-        cfg.precedence_of(t) for t in cfg.doc_types
-    )
+    assert cfg.precedence_of("invoice") == min(cfg.precedence_of(t) for t in cfg.doc_types)
 
 
 def test_every_doc_type_has_a_loadable_extraction_schema():
@@ -54,8 +53,10 @@ def _write_domain(tmp_path, **overrides):
     (root / "rules").mkdir(parents=True)
     files = {
         "doc_types.yaml": {"doc_types": {"memo": {"label": "Memo", "extraction": "memo"}}},
-        "extraction/memo.yaml": {"entity_key": "e:{counterparty_slug}",
-                                 "fields": {"who": {"type": "text"}}},
+        "extraction/memo.yaml": {
+            "entity_key": "e:{counterparty_slug}",
+            "fields": {"who": {"type": "text"}},
+        },
         "normalization.yaml": {"accepted_formats": ["txt"]},
         "reconciliation.yaml": {"precedence": ["memo"]},
         "rules/playbook.yaml": {"rules": {"r1": {"statement": "s", "applies_to": ["memo"]}}},
@@ -71,8 +72,11 @@ def test_broken_config_fails_at_load_not_mid_run(tmp_path):
     load_domain.cache_clear()
     root = _write_domain(
         tmp_path,
-        **{"rules/playbook.yaml": {"rules": {"r1": {"statement": "s",
-                                                   "applies_to": ["nonexistent"]}}}},
+        **{
+            "rules/playbook.yaml": {
+                "rules": {"r1": {"statement": "s", "applies_to": ["nonexistent"]}}
+            }
+        },
     )
     with pytest.raises(ConfigError, match="unknown doc types"):
         load_domain("toy", root=root.parent)

@@ -4,9 +4,8 @@ The two properties under test are the ones the whole deliverable rests on: a
 conflict is surfaced but never resolved, and a section's content hash changes if
 and only if that section's content changed.
 """
-from __future__ import annotations
 
-from pathlib import Path
+from __future__ import annotations
 
 import pytest
 
@@ -49,11 +48,14 @@ def _conflict(report, field):
 
 # ------------------------------------------------------------ reconcile --
 
+
 def test_exactly_the_three_real_disagreements_are_found(report):
     """The corpus was built with three contractual disagreements in it. Finding
     more than three means noise; finding fewer means a miss."""
     assert {c.field for c in report.conflicts} == {
-        "hourly_rate", "liability_cap", "payment_terms_days"
+        "hourly_rate",
+        "liability_cap",
+        "payment_terms_days",
     }
 
 
@@ -62,8 +64,14 @@ def test_per_document_fields_are_not_reported_as_disagreements(report):
     amounts. Reporting those as conflicts would bury the three real ones under
     six false ones, and a reviewer stops reading long before that."""
     fields = {c.field for c in report.conflicts}
-    for noisy in ("invoice_number", "invoice_date", "amount_due",
-                  "hours_billed", "service_period", "effective_date"):
+    for noisy in (
+        "invoice_number",
+        "invoice_date",
+        "amount_due",
+        "hours_billed",
+        "service_period",
+        "effective_date",
+    ):
         assert noisy not in fields
     assert report.reconciliation.per_document["invoice_number"] == 3
 
@@ -100,8 +108,7 @@ def test_a_proposal_is_only_ever_a_proposal(report):
 def test_equal_authority_disagreeing_yields_no_proposal(cfg, report):
     """Two documents of the same rank stating different values. An arbitrary
     pick dressed as a recommendation is worse than admitting it is unsettled."""
-    invoices = [m for m in _conflict(report, "hourly_rate").members
-                if m.doc_type == "invoice"]
+    invoices = [m for m in _conflict(report, "hourly_rate").members if m.doc_type == "invoice"]
     result = reconcile(cfg, invoices)
     conflict = next(c for c in result.conflicts if c.field == "hourly_rate")
     assert conflict.proposed is None
@@ -130,6 +137,7 @@ def test_conflict_volume_escalates_the_whole_run(cfg, report):
 
 
 # -------------------------------------------------------------- compose --
+
 
 def test_every_rendered_value_is_cited_or_explicitly_a_gap(report):
     """There is no third state. A blank cell would imply "nothing to say here"
@@ -179,13 +187,20 @@ def test_changing_one_fact_changes_only_its_section_hash(cfg, report):
     for sourced in report.facts:
         if sourced.field == "liability_cap" and sourced.doc_type == "msa":
             bumped = type(sourced.fact.normalised)(
-                raw="USD 999,999", canonical="USD 999999.00", value_type="money",
-                number=sourced.fact.normalised.number, currency="USD",
+                raw="USD 999,999",
+                canonical="USD 999999.00",
+                value_type="money",
+                number=sourced.fact.normalised.number,
+                currency="USD",
             )
-            edited.append(SourcedFact(
-                sourced.document, sourced.doc_type, sourced.entity_key,
-                type(sourced.fact)(**{**sourced.fact.__dict__, "normalised": bumped}),
-            ))
+            edited.append(
+                SourcedFact(
+                    sourced.document,
+                    sourced.doc_type,
+                    sourced.entity_key,
+                    type(sourced.fact)(**{**sourced.fact.__dict__, "normalised": bumped}),
+                )
+            )
         else:
             edited.append(sourced)
 
@@ -210,8 +225,17 @@ def test_fields_no_document_states_appear_in_the_gaps_section(cfg, report):
 def test_the_run_reports_what_it_cost_by_stage(report):
     """Behaviour 10, falling out of the same record that makes stages watchable."""
     costs = report.cost_by_stage()
-    assert set(costs) == {"ingest", "classify", "extract", "resolve_entity",
-                          "reconcile", "compose", "examine", "delta", "gate"}
+    assert set(costs) == {
+        "ingest",
+        "classify",
+        "extract",
+        "resolve_entity",
+        "reconcile",
+        "compose",
+        "examine",
+        "delta",
+        "gate",
+    }
     assert costs["classify"]["calls"] == 7
     assert costs["extract"]["tokens_in"] > 0
     # Only the two stages that talk to a model may report a cost. If a stage
@@ -232,29 +256,43 @@ def test_the_run_records_which_path_each_stage_took(report):
 
 # ------------------------------------------- equal authority, later wins --
 
+
 def test_a_later_amendment_supersedes_an_earlier_one(cfg, report):
     """Two amendments both outrank the agreement they amend, so doc_type alone
     cannot separate them. The documents say when they take effect, and the later
     one governs -- without this the system gives up exactly where a reviewer
     most needs an answer."""
-    from datetime import date
 
     from app.domain.models import SourcedFact
     from app.stages.reconcile import reconcile
 
-    earlier = next(m for m in report.facts
-                   if m.field == "hourly_rate" and m.doc_type == "amendment")
+    earlier = next(
+        m for m in report.facts if m.field == "hourly_rate" and m.doc_type == "amendment"
+    )
     assert earlier.canonical == "USD 135.00"
-    later = SourcedFact("amendment_02.md", "amendment", earlier.entity_key,
-                        _valued(cfg, earlier, "hourly_rate", "USD 145", "money"))
+    later = SourcedFact(
+        "amendment_02.md",
+        "amendment",
+        earlier.entity_key,
+        _valued(cfg, earlier, "hourly_rate", "USD 145", "money"),
+    )
     dates = [
-        SourcedFact("amendment_01.md", "amendment", earlier.entity_key,
-                    _valued(cfg, earlier, "effective_date", "1 June 2026", "date")),
-        SourcedFact("amendment_02.md", "amendment", earlier.entity_key,
-                    _valued(cfg, earlier, "effective_date", "1 December 2026", "date")),
+        SourcedFact(
+            "amendment_01.md",
+            "amendment",
+            earlier.entity_key,
+            _valued(cfg, earlier, "effective_date", "1 June 2026", "date"),
+        ),
+        SourcedFact(
+            "amendment_02.md",
+            "amendment",
+            earlier.entity_key,
+            _valued(cfg, earlier, "effective_date", "1 December 2026", "date"),
+        ),
     ]
-    conflict = next(c for c in reconcile(cfg, [earlier, later] + dates).conflicts
-                    if c.field == "hourly_rate")
+    conflict = next(
+        c for c in reconcile(cfg, [earlier, later, *dates]).conflicts if c.field == "hourly_rate"
+    )
     assert conflict.proposed is not None
     assert conflict.proposed.document == "amendment_02.md"
     assert "supersedes the earlier" in conflict.rationale
@@ -262,15 +300,18 @@ def test_a_later_amendment_supersedes_an_earlier_one(cfg, report):
 
 def test_equal_authority_with_no_effective_date_still_refuses_to_guess(cfg, report):
     """The tiebreak only applies when the documents actually settle it."""
-    from app.domain.models import SourcedFact
     from app.stages.reconcile import reconcile
 
-    a = next(m for m in report.facts
-             if m.field == "hourly_rate" and m.doc_type == "invoice"
-             and m.canonical == "USD 120.00")
-    b = next(m for m in report.facts
-             if m.field == "hourly_rate" and m.doc_type == "invoice"
-             and m.canonical == "USD 135.00")
+    a = next(
+        m
+        for m in report.facts
+        if m.field == "hourly_rate" and m.doc_type == "invoice" and m.canonical == "USD 120.00"
+    )
+    b = next(
+        m
+        for m in report.facts
+        if m.field == "hourly_rate" and m.doc_type == "invoice" and m.canonical == "USD 135.00"
+    )
     conflict = next(c for c in reconcile(cfg, [a, b]).conflicts if c.field == "hourly_rate")
     assert conflict.proposed is None
     assert "does not state an effective date" in conflict.rationale
@@ -282,8 +323,12 @@ def _valued(cfg, template, field_name, text, value_type):
     from app.stages.extract import ExtractedFact
 
     return ExtractedFact(
-        field_name=field_name, value_raw=text, quote=template.fact.quote,
+        field_name=field_name,
+        value_raw=text,
+        quote=template.fact.quote,
         span=template.fact.span,
         normalised=normalise(value_type, text, cfg.normalization),
-        value_type=value_type, unit=None, confidence=1.0,
+        value_type=value_type,
+        unit=None,
+        confidence=1.0,
     )

@@ -4,6 +4,7 @@ Everything downstream extracts against the chosen type's schema, so a confident
 wrong classification poisons every fact that follows it. The branches tested
 here are the ones that stop that happening.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -42,11 +43,11 @@ def test_low_confidence_escalates_instead_of_guessing(cfg):
 
 def test_the_confidence_threshold_is_adjustable(cfg):
     provider = ScriptedProvider(classification("msa", 0.80))
-    assert classify_document(provider, cfg, "f.md", MSA_TEXT,
-                             min_confidence=0.6).path == "classified"
+    assert (
+        classify_document(provider, cfg, "f.md", MSA_TEXT, min_confidence=0.6).path == "classified"
+    )
     provider = ScriptedProvider(classification("msa", 0.80))
-    assert classify_document(provider, cfg, "f.md", MSA_TEXT,
-                             min_confidence=0.9).path == "escalate"
+    assert classify_document(provider, cfg, "f.md", MSA_TEXT, min_confidence=0.9).path == "escalate"
 
 
 def test_a_type_outside_the_taxonomy_escalates(cfg):
@@ -74,6 +75,7 @@ def test_null_type_escalates(cfg):
 
 
 # ------------------------------------------------- the injection branch --
+
 
 def test_a_poisoned_document_is_quarantined(cfg):
     provider = ScriptedProvider()  # any model call at all fails the test
@@ -117,6 +119,7 @@ def test_ordinary_documents_are_not_quarantined(cfg):
 
 
 # ------------------------------------------------------------- plumbing --
+
 
 def test_the_prompt_frames_the_document_as_untrusted(cfg):
     provider = ScriptedProvider(classification("msa", 0.95))

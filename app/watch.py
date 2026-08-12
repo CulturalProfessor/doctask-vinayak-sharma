@@ -58,14 +58,17 @@ own:
 
     python -m app.watch
 """
+
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import signal
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from app import operations as ops
 from app.ingest.ingest import sha256_bytes
@@ -93,22 +96,31 @@ class WatchMisconfigured(RuntimeError):
 @dataclass
 class Outcome:
     """One decision about one file, in the vocabulary of `watch_event`."""
+
     filename: str
-    outcome: str          # dispatched | duplicate | busy | failed | no_pile
+    outcome: str  # dispatched | duplicate | busy | failed | no_pile
     detail: str | None = None
     run_id: str | None = None
 
     def as_dict(self) -> dict[str, Any]:
-        return {"filename": self.filename, "outcome": self.outcome,
-                "detail": self.detail, "run_id": self.run_id}
+        return {
+            "filename": self.filename,
+            "outcome": self.outcome,
+            "detail": self.detail,
+            "run_id": self.run_id,
+        }
 
 
 class Watcher:
     """Scans a directory and turns settled arrivals into `arrival` calls."""
 
-    def __init__(self, directory: Path, pile_name: str,
-                 domain: str = "vendor_contracts",
-                 dispatch: Callable[..., dict[str, Any]] | None = None) -> None:
+    def __init__(
+        self,
+        directory: Path,
+        pile_name: str,
+        domain: str = "vendor_contracts",
+        dispatch: Callable[..., dict[str, Any]] | None = None,
+    ) -> None:
         self.directory = Path(directory)
         self.pile_name = pile_name
         self.domain = domain
@@ -175,8 +187,7 @@ class Watcher:
                 outcome = self._handle(path)
             except Exception as exc:  # the loop must survive a bad file
                 log.exception("watch: unhandled error on %s", path.name)
-                outcome = Outcome(path.name, "failed",
-                                  f"{type(exc).__name__}: {exc}")
+                outcome = Outcome(path.name, "failed", f"{type(exc).__name__}: {exc}")
             if outcome is not None:
                 outcomes.append(outcome)
         return outcomes
@@ -193,10 +204,8 @@ class Watcher:
             # Nothing recorded, so this is retried once the pile exists. The
             # alternative -- a `failed` row -- would permanently refuse a
             # document because of a startup ordering problem.
-            log.warning("watch: no pile named %r; %s left in place",
-                        self.pile_name, path.name)
-            return Outcome(path.name, "no_pile",
-                           f"no pile named {self.pile_name!r}")
+            log.warning("watch: no pile named %r; %s left in place", self.pile_name, path.name)
+            return Outcome(path.name, "no_pile", f"no pile named {self.pile_name!r}")
 
         if _already_handled(pile_id, digest):
             return None
@@ -210,8 +219,7 @@ class Watcher:
             return Outcome(path.name, "busy", str(exc))
         except Exception as exc:  # recorded as a failure, never raised
             log.warning("watch: %s failed: %s", path.name, exc)
-            _record(pile_id, path.name, digest, "failed",
-                    detail=f"{type(exc).__name__}: {exc}")
+            _record(pile_id, path.name, digest, "failed", detail=f"{type(exc).__name__}: {exc}")
             return Outcome(path.name, "failed", f"{type(exc).__name__}: {exc}")
 
         run_id = result.get("run_id")
@@ -223,8 +231,8 @@ class Watcher:
 
 # ------------------------------------------------------------------ the loop --
 
-async def run_forever(watcher: Watcher, interval: float,
-                      stop: asyncio.Event | None = None) -> None:
+
+async def run_forever(watcher: Watcher, interval: float, stop: asyncio.Event | None = None) -> None:
     """Tick until told to stop.
 
     `to_thread` because every operation below this line is blocking psycopg, and
@@ -232,8 +240,9 @@ async def run_forever(watcher: Watcher, interval: float,
     a process with.
     """
     stop = stop or asyncio.Event()
-    log.info("watch: watching %s for pile %r every %.1fs",
-             watcher.directory, watcher.pile_name, interval)
+    log.info(
+        "watch: watching %s for pile %r every %.1fs", watcher.directory, watcher.pile_name, interval
+    )
     while not stop.is_set():
         try:
             await asyncio.to_thread(watcher.tick)
@@ -246,11 +255,13 @@ async def run_forever(watcher: Watcher, interval: float,
 
 
 def from_settings(dispatch: Callable[..., dict[str, Any]] | None = None) -> Watcher:
-    return Watcher(settings.watch_dir, settings.watch_pile,
-                   settings.watch_domain, dispatch=dispatch)
+    return Watcher(
+        settings.watch_dir, settings.watch_pile, settings.watch_domain, dispatch=dispatch
+    )
 
 
 # ---------------------------------------------------------------- reporting --
+
 
 def status() -> dict[str, Any]:
     """What the watcher is configured to do and what it has recently done.
@@ -268,36 +279,53 @@ def status() -> dict[str, Any]:
         "pile": settings.watch_pile,
         "pile_id": pile_id,
         "interval_seconds": settings.watch_interval_seconds,
-        "pending_files": sorted(
-            p.name for p in directory.iterdir()
-            if p.is_file() and not _ignored(p)
-        ) if directory.is_dir() else [],
+        "pending_files": (
+            sorted(p.name for p in directory.iterdir() if p.is_file() and not _ignored(p))
+            if directory.is_dir()
+            else []
+        ),
     }
     if pile_id:
         with transaction() as conn:
-            body["events"] = fetch_all(conn, """
+            body["events"] = fetch_all(
+                conn,
+                """
                 SELECT filename, outcome, detail, run_id, at
                 FROM watch_event WHERE pile_id = %s
                 ORDER BY at DESC LIMIT 50
-            """, (pile_id,))
+            """,
+                (pile_id,),
+            )
     else:
         body["events"] = []
-        body["note"] = (f"no pile named {settings.watch_pile!r}; arrivals are "
-                        f"deferred rather than failed until it exists")
+        body["note"] = (
+            f"no pile named {settings.watch_pile!r}; arrivals are "
+            f"deferred rather than failed until it exists"
+        )
     return body
 
 
 # ----------------------------------------------------------------- plumbing --
 
-def _record(pile_id: str, filename: str, digest: str, outcome: str,
-            detail: str | None = None, run_id: str | None = None) -> None:
+
+def _record(
+    pile_id: str,
+    filename: str,
+    digest: str,
+    outcome: str,
+    detail: str | None = None,
+    run_id: str | None = None,
+) -> None:
     with transaction() as conn:
-        execute(conn, """
+        execute(
+            conn,
+            """
             INSERT INTO watch_event (pile_id, filename, content_sha256, outcome,
                                      run_id, detail)
             VALUES (%s, %s, %s, %s, %s, %s)
-        """, (pile_id, filename, digest, outcome, run_id,
-              (detail or "")[:2000] or None))
+        """,
+            (pile_id, filename, digest, outcome, run_id, (detail or "")[:2000] or None),
+        )
 
 
 def _already_handled(pile_id: str, digest: str) -> bool:
@@ -320,15 +348,25 @@ def _already_handled(pile_id: str, digest: str) -> bool:
     only finding is that nothing changed.
     """
     with transaction() as conn:
-        if fetch_one(conn, """
+        if fetch_one(
+            conn,
+            """
             SELECT 1 FROM watch_event
             WHERE pile_id = %s AND content_sha256 = %s
               AND outcome IN ('dispatched', 'failed')
-        """, (pile_id, digest)):
+        """,
+            (pile_id, digest),
+        ):
             return True
-        return bool(fetch_one(conn, """
+        return bool(
+            fetch_one(
+                conn,
+                """
             SELECT 1 FROM document WHERE pile_id = %s AND content_sha256 = %s
-        """, (pile_id, digest)))
+        """,
+                (pile_id, digest),
+            )
+        )
 
 
 def _pile_id(name: str) -> str | None:
@@ -351,16 +389,13 @@ def _ignored(path: Path) -> bool:
 
 
 async def _main() -> None:
-    logging.basicConfig(level=logging.INFO,
-                        format="%(asctime)s %(levelname)s %(name)s %(message)s")
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
     watcher = from_settings()
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):
-        try:
+        with contextlib.suppress(NotImplementedError):  # not every platform has these
             loop.add_signal_handler(sig, stop.set)
-        except NotImplementedError:  # not every platform has these
-            pass
     await run_forever(watcher, settings.watch_interval_seconds, stop)
     log.info("watch: stopped")
 
@@ -369,5 +404,11 @@ if __name__ == "__main__":
     asyncio.run(_main())
 
 
-__all__ = ["Watcher", "Outcome", "WatchMisconfigured", "run_forever",
-           "from_settings", "status"]
+__all__ = [
+    "Outcome",
+    "WatchMisconfigured",
+    "Watcher",
+    "from_settings",
+    "run_forever",
+    "status",
+]

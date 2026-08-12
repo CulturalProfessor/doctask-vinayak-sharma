@@ -10,16 +10,23 @@ Two properties this stage owes the rest of the system:
   a note. It is never silently dropped, because a pile that quietly lost a
   document produces a register that is confidently wrong.
 """
+
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
 
 import psycopg
 
-from app.ingest.formats import SUPPORTED, ExtractedPage, UnsupportedFormat, detect_format, extract_pages
+from app.ingest.formats import (
+    SUPPORTED,
+    ExtractedPage,
+    UnsupportedFormat,
+    detect_format,
+    extract_pages,
+)
 from app.store.engine import fetch_one
 
 
@@ -33,8 +40,8 @@ class IngestResult:
     filename: str
     sha256: str
     format: str | None
-    status: str            # ingested | unsupported | empty
-    duplicate: bool        # True when these exact bytes were already in the pile
+    status: str  # ingested | unsupported | empty
+    duplicate: bool  # True when these exact bytes were already in the pile
     pages: int = 0
     note: str | None = None
 
@@ -43,8 +50,9 @@ class IngestResult:
         return self.status == "ingested" and not self.duplicate
 
 
-def ingest_bytes(conn: psycopg.Connection, pile_id: str, filename: str, data: bytes,
-                 uri: str | None = None) -> IngestResult:
+def ingest_bytes(
+    conn: psycopg.Connection, pile_id: str, filename: str, data: bytes, uri: str | None = None
+) -> IngestResult:
     digest = sha256_bytes(data)
     path = Path(filename)
 
@@ -57,34 +65,50 @@ def ingest_bytes(conn: psycopg.Connection, pile_id: str, filename: str, data: by
         # Identical bytes already in this pile. Nothing to do, and saying so is
         # the whole point -- this is what makes a re-run cost nothing.
         return IngestResult(
-            document_id=str(existing["id"]), filename=filename, sha256=digest,
-            format=existing["format"], status=existing["status"], duplicate=True,
+            document_id=str(existing["id"]),
+            filename=filename,
+            sha256=digest,
+            format=existing["format"],
+            status=existing["status"],
+            duplicate=True,
             note="identical bytes already ingested; no change",
         )
 
     try:
         fmt = detect_format(path, data)
     except UnsupportedFormat as exc:
-        doc_id, _ = _insert_document(conn, pile_id, uri or filename, filename, digest,
-                                     len(data), "unknown", "unsupported", str(exc))
+        doc_id, _ = _insert_document(
+            conn,
+            pile_id,
+            uri or filename,
+            filename,
+            digest,
+            len(data),
+            "unknown",
+            "unsupported",
+            str(exc),
+        )
         return IngestResult(doc_id, filename, digest, None, "unsupported", False, note=str(exc))
 
     try:
         pages: list[ExtractedPage] = extract_pages(data, fmt)
     except Exception as exc:  # a corrupt PDF is a gap, not a crash
         note = f"could not extract text: {type(exc).__name__}: {exc}"
-        doc_id, _ = _insert_document(conn, pile_id, uri or filename, filename, digest,
-                                     len(data), fmt, "unsupported", note)
+        doc_id, _ = _insert_document(
+            conn, pile_id, uri or filename, filename, digest, len(data), fmt, "unsupported", note
+        )
         return IngestResult(doc_id, filename, digest, fmt, "unsupported", False, note=note)
 
     if not pages:
         note = "no extractable text"
-        doc_id, _ = _insert_document(conn, pile_id, uri or filename, filename, digest,
-                                     len(data), fmt, "empty", note)
+        doc_id, _ = _insert_document(
+            conn, pile_id, uri or filename, filename, digest, len(data), fmt, "empty", note
+        )
         return IngestResult(doc_id, filename, digest, fmt, "empty", False, note=note)
 
-    doc_id, created = _insert_document(conn, pile_id, uri or filename, filename,
-                                       digest, len(data), fmt, "ingested", None)
+    doc_id, created = _insert_document(
+        conn, pile_id, uri or filename, filename, digest, len(data), fmt, "ingested", None
+    )
     if not created:
         # Lost the race. The other writer's document is the real one and it is
         # inserting the pages, so writing ours would either collide on
@@ -92,8 +116,12 @@ def ingest_bytes(conn: psycopg.Connection, pile_id: str, filename: str, data: by
         # the fast path above gives for bytes we already held, and it has to be,
         # because "these bytes are already in the pile" is true either way.
         return IngestResult(
-            document_id=doc_id, filename=filename, sha256=digest, format=fmt,
-            status="ingested", duplicate=True,
+            document_id=doc_id,
+            filename=filename,
+            sha256=digest,
+            format=fmt,
+            status="ingested",
+            duplicate=True,
             note="identical bytes ingested concurrently by another run; no change",
         )
 
@@ -105,9 +133,17 @@ def ingest_bytes(conn: psycopg.Connection, pile_id: str, filename: str, data: by
     return IngestResult(doc_id, filename, digest, fmt, "ingested", False, pages=len(pages))
 
 
-def _insert_document(conn: psycopg.Connection, pile_id: str, uri: str, filename: str,
-                     digest: str, size: int, fmt: str, status: str,
-                     note: str | None) -> tuple[str, bool]:
+def _insert_document(
+    conn: psycopg.Connection,
+    pile_id: str,
+    uri: str,
+    filename: str,
+    digest: str,
+    size: int,
+    fmt: str,
+    status: str,
+    note: str | None,
+) -> tuple[str, bool]:
     """Insert the document, or find the one that beat us to it.
 
     Returns whether *this* call created the row, and the caller has to care.
@@ -143,8 +179,9 @@ def ingest_path(conn: psycopg.Connection, pile_id: str, path: Path) -> IngestRes
     return ingest_bytes(conn, pile_id, path.name, path.read_bytes(), uri=str(path))
 
 
-def ingest_directory(conn: psycopg.Connection, pile_id: str, directory: Path,
-                     patterns: Iterable[str] = ("*",)) -> list[IngestResult]:
+def ingest_directory(
+    conn: psycopg.Connection, pile_id: str, directory: Path, patterns: Iterable[str] = ("*",)
+) -> list[IngestResult]:
     """Ingest every file in a directory, in a stable order.
 
     Sorted so that two runs over the same directory see documents in the same
@@ -168,5 +205,12 @@ def ensure_pile(conn: psycopg.Connection, name: str, domain: str) -> str:
     return str(row["id"])
 
 
-__all__ = ["ingest_bytes", "ingest_path", "ingest_directory", "ensure_pile",
-           "IngestResult", "sha256_bytes", "SUPPORTED"]
+__all__ = [
+    "SUPPORTED",
+    "IngestResult",
+    "ensure_pile",
+    "ingest_bytes",
+    "ingest_directory",
+    "ingest_path",
+    "sha256_bytes",
+]

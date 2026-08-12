@@ -4,6 +4,7 @@ Configuration over code: a new document type, extraction field, normalisation
 rule or checklist item is a YAML change under `config/domains/<domain>/`. If
 adding one of those needs Python, the design is wrong -- see TASK.md.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -29,7 +30,7 @@ class DocTypeSpec:
     key: str
     label: str
     hints: list[str] = field(default_factory=list)
-    extraction: str | None = None      # name of the extraction schema file
+    extraction: str | None = None  # name of the extraction schema file
 
 
 @dataclass(frozen=True)
@@ -57,7 +58,9 @@ class DomainConfig:
 
     @property
     def accepted_formats(self) -> list[str]:
-        return list(self.normalization.get("accepted_formats", ["txt", "md", "html", "pdf", "docx"]))
+        return list(
+            self.normalization.get("accepted_formats", ["txt", "md", "html", "pdf", "docx"])
+        )
 
     def precedence_of(self, doc_type: str | None) -> int:
         """Higher wins. Used to *propose* a conflict resolution, never to apply
@@ -99,7 +102,9 @@ def load_domain(name: str, root: Path | None = None) -> DomainConfig:
     extraction: dict[str, dict[str, Any]] = {}
     for spec in doc_types.values():
         if spec.extraction:
-            extraction[spec.extraction] = _read_yaml(base / "extraction" / f"{spec.extraction}.yaml")
+            extraction[spec.extraction] = _read_yaml(
+                base / "extraction" / f"{spec.extraction}.yaml"
+            )
 
     raw_rules = _read_yaml(base / "rules" / "playbook.yaml").get("rules", {})
     rules = {
@@ -167,9 +172,7 @@ def _validate(cfg: DomainConfig) -> None:
 
     # A typo in instance_fields silently re-enables noisy conflicts for that
     # field, which is the kind of failure nobody notices until a demo.
-    known_fields = {
-        name for schema in cfg.extraction.values() for name in schema.get("fields", {})
-    }
+    known_fields = {name for schema in cfg.extraction.values() for name in schema.get("fields", {})}
     for key in ("instance_fields", "time_varying_fields", "identity_fields"):
         unknown = [f for f in cfg.reconciliation.get(key, []) if f not in known_fields]
         if unknown:

@@ -39,11 +39,12 @@ Contention is at the pile, not the graph. LangGraph's checkpointing is
 per-thread and has nothing to say about two threads on one pile, which is why
 this lives in our schema. PLAN.md section 6 called this one correctly.
 """
+
 from __future__ import annotations
 
 import time
+from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Iterator
 
 import psycopg
 
@@ -61,8 +62,7 @@ class PileBusy(RuntimeError):
 
 
 @contextmanager
-def hold_pile(conn: psycopg.Connection, pile_id: str,
-              wait_seconds: float = 2.0) -> Iterator[None]:
+def hold_pile(conn: psycopg.Connection, pile_id: str, wait_seconds: float = 2.0) -> Iterator[None]:
     """Hold the pile for the duration of a run's working phase."""
     key = f"pile:{pile_id}"
     deadline = time.monotonic() + max(0.0, wait_seconds)
@@ -114,11 +114,15 @@ def _holder(conn: psycopg.Connection, pile_id: str) -> str:
     Best effort on purpose: the lock is the authority, and this is only here so
     that the refusal says something a person can act on instead of "busy".
     """
-    row = fetch_one(conn, """
+    row = fetch_one(
+        conn,
+        """
         SELECT id::text AS id, kind, started_at FROM run
         WHERE pile_id = %s AND status = 'running'
         ORDER BY started_at DESC LIMIT 1
-    """, (pile_id,))
+    """,
+        (pile_id,),
+    )
     if not row:
         return "another process"
     return f"run {row['id']} ({row['kind']}, started {row['started_at']:%H:%M:%S})"

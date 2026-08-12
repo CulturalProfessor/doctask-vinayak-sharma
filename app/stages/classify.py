@@ -11,6 +11,7 @@ graph from a script with stage labels:
   A document that tries to instruct the reader is quarantined. It leaves the
   extraction path entirely and becomes a finding.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -46,8 +47,13 @@ class Classification:
         return "classified"
 
 
-def classify_document(provider: Provider, cfg: DomainConfig, filename: str, text: str,
-                      min_confidence: float | None = None) -> Classification:
+def classify_document(
+    provider: Provider,
+    cfg: DomainConfig,
+    filename: str,
+    text: str,
+    min_confidence: float | None = None,
+) -> Classification:
     """Classify one document, screening it for injected instructions first.
 
     The screen runs before the model call, and a hit short-circuits it. There is
@@ -59,16 +65,19 @@ def classify_document(provider: Provider, cfg: DomainConfig, filename: str, text
     verdict = screen_text(text, cfg.reconciliation.get("extra_injection_patterns"))
     if verdict.suspicious:
         return Classification(
-            doc_type=None, confidence=0.0,
+            doc_type=None,
+            confidence=0.0,
             reasoning="not classified: document contains directives aimed at the reader",
-            quarantine=True, screen=verdict,
+            quarantine=True,
+            screen=verdict,
             note=verdict.statement(filename),
         )
 
     system, user = classify_prompt(cfg.doc_types, filename, text)
     try:
-        completion: Completion = provider.complete(purpose="classify", system=system,
-                                                   user=user, max_tokens=512)
+        completion: Completion = provider.complete(
+            purpose="classify", system=system, user=user, max_tokens=512
+        )
         payload = completion.json()
     except ProviderUnavailable:
         # The deployment is broken, not the document. Escalating here would
@@ -78,15 +87,18 @@ def classify_document(provider: Provider, cfg: DomainConfig, filename: str, text
         # An unreadable answer is not a classification. Escalating is the honest
         # outcome; picking the most common type would be a guess wearing a
         # confidence score.
-        return Classification(None, 0.0, f"model response unusable: {exc}",
-                              escalate=True, note=str(exc)[:300])
+        return Classification(
+            None, 0.0, f"model response unusable: {exc}", escalate=True, note=str(exc)[:300]
+        )
 
     doc_type = payload.get("doc_type")
     if doc_type is not None and doc_type not in cfg.doc_types:
         return Classification(
-            None, 0.0,
+            None,
+            0.0,
             f"model proposed type {doc_type!r}, which is not in the configured taxonomy",
-            escalate=True, usage=completion.usage,
+            escalate=True,
+            usage=completion.usage,
             note=f"unknown type {doc_type!r}",
         )
 
@@ -99,18 +111,30 @@ def classify_document(provider: Provider, cfg: DomainConfig, filename: str, text
     # point of having both.
     if model_flag:
         return Classification(
-            doc_type=doc_type, confidence=confidence, reasoning=reasoning,
-            quarantine=True, model_flagged_instructions=True, usage=completion.usage,
-            note=(f"{filename}: the deterministic screen found nothing, but the model "
-                  f"judged the document to contain instructions aimed at its reader"),
+            doc_type=doc_type,
+            confidence=confidence,
+            reasoning=reasoning,
+            quarantine=True,
+            model_flagged_instructions=True,
+            usage=completion.usage,
+            note=(
+                f"{filename}: the deterministic screen found nothing, but the model "
+                f"judged the document to contain instructions aimed at its reader"
+            ),
         )
 
     if doc_type is None or confidence < threshold:
         return Classification(
-            doc_type=doc_type, confidence=confidence, reasoning=reasoning,
-            escalate=True, usage=completion.usage,
-            note=(f"confidence {confidence:.2f} below threshold {threshold:.2f}"
-                  if doc_type else "model could not place the document in the taxonomy"),
+            doc_type=doc_type,
+            confidence=confidence,
+            reasoning=reasoning,
+            escalate=True,
+            usage=completion.usage,
+            note=(
+                f"confidence {confidence:.2f} below threshold {threshold:.2f}"
+                if doc_type
+                else "model could not place the document in the taxonomy"
+            ),
         )
 
     return Classification(doc_type, confidence, reasoning, usage=completion.usage)

@@ -3,10 +3,12 @@
 LangGraph's checkpointer speaks psycopg too, so the whole system needs exactly
 one database driver.
 """
+
 from __future__ import annotations
 
+from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Any, Iterator
+from typing import Any
 
 import psycopg
 from psycopg.rows import dict_row
@@ -76,8 +78,7 @@ def try_session_lock(conn: psycopg.Connection, key: str) -> bool:
     pile locked against the process that comes to resume it.
     """
     with conn.cursor() as cur:
-        cur.execute("SELECT pg_try_advisory_lock(%s, hashtext(%s)) AS taken",
-                    (LOCK_NAMESPACE, key))
+        cur.execute("SELECT pg_try_advisory_lock(%s, hashtext(%s)) AS taken", (LOCK_NAMESPACE, key))
         return bool(cur.fetchone()["taken"])
 
 
@@ -85,5 +86,4 @@ def release_session_lock(conn: psycopg.Connection, key: str) -> None:
     """Give the pile back. Closing the connection would do it too; this makes
     the release visible at the point the run actually stops working on it."""
     with conn.cursor() as cur:
-        cur.execute("SELECT pg_advisory_unlock(%s, hashtext(%s))",
-                    (LOCK_NAMESPACE, key))
+        cur.execute("SELECT pg_advisory_unlock(%s, hashtext(%s))", (LOCK_NAMESPACE, key))

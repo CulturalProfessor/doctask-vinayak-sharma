@@ -1,7 +1,7 @@
 """Behaviour 7 says real tests run without a live key. That claim deserves a
 test of its own rather than an assertion in a README."""
-from __future__ import annotations
 
+from __future__ import annotations
 
 import pytest
 

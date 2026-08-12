@@ -5,6 +5,7 @@ whole test suite run with no key and no network (graded behaviour 7), and what
 makes per-stage cost reporting possible (behaviour 10) without threading token
 counts through business logic.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -47,7 +48,7 @@ class Usage:
     cost_usd: float = 0.0
     model: str = "fake"
 
-    def __add__(self, other: "Usage") -> "Usage":
+    def __add__(self, other: Usage) -> Usage:
         return Usage(
             self.tokens_in + other.tokens_in,
             self.tokens_out + other.tokens_out,
@@ -71,7 +72,7 @@ class Completion:
         if raw.startswith("```"):
             raw = raw.split("\n", 1)[1] if "\n" in raw else raw
             if raw.endswith("```"):
-                raw = raw[: -3]
+                raw = raw[:-3]
             raw = raw.strip()
             if raw.startswith("json"):
                 raw = raw[4:].strip()
@@ -122,7 +123,7 @@ def _first_json_object(text: str) -> str | None:
         elif ch == "}":
             depth -= 1
             if depth == 0:
-                return text[start:i + 1]
+                return text[start : i + 1]
     return None
 
 
@@ -135,8 +136,9 @@ def call_key(purpose: str, system: str, user: str) -> str:
 class Provider(Protocol):
     name: str
 
-    def complete(self, *, purpose: str, system: str, user: str,
-                 max_tokens: int = 2048) -> Completion: ...
+    def complete(
+        self, *, purpose: str, system: str, user: str, max_tokens: int = 2048
+    ) -> Completion: ...
 
 
 def get_provider(name: str | None = None) -> Provider:

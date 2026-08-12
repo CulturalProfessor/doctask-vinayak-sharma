@@ -14,11 +14,13 @@ becomes something the system proves rather than promises. That makes
 determinism load-bearing: the same facts must render the same bytes, so
 everything here is ordered explicitly rather than relying on dict order.
 """
+
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass, field as dc_field
-from typing import Iterable
+from collections.abc import Iterable
+from dataclasses import dataclass
+from dataclasses import field as dc_field
 
 from app.domain.config import DomainConfig
 from app.domain.models import SourcedFact
@@ -66,8 +68,12 @@ def content_hash(body: str) -> str:
     return hashlib.sha256(body.encode()).hexdigest()
 
 
-def compose(cfg: DomainConfig, facts: Iterable[SourcedFact], conflicts: list[Conflict],
-            gaps: list[tuple[str, Gap]]) -> Register:
+def compose(
+    cfg: DomainConfig,
+    facts: Iterable[SourcedFact],
+    conflicts: list[Conflict],
+    gaps: list[tuple[str, Gap]],
+) -> Register:
     """Render the register from reconciled facts.
 
     `gaps` are (document, Gap) pairs carried through from extraction, so the
@@ -92,11 +98,17 @@ def compose(cfg: DomainConfig, facts: Iterable[SourcedFact], conflicts: list[Con
             body, citations, gap_count = _render_fields(
                 spec.get("fields", []), by_field, conflicted_fields
             )
-        sections.append(Section(
-            key=spec["key"], heading=spec.get("heading", spec["key"]), ordinal=ordinal,
-            body=body, content_hash=content_hash(body),
-            citations=citations, gap_count=gap_count,
-        ))
+        sections.append(
+            Section(
+                key=spec["key"],
+                heading=spec.get("heading", spec["key"]),
+                ordinal=ordinal,
+                body=body,
+                content_hash=content_hash(body),
+                citations=citations,
+                gap_count=gap_count,
+            )
+        )
 
     return Register(title=cfg.register.get("title", "Register"), sections=sections)
 
@@ -112,11 +124,13 @@ def _table(headers: list[str], rows: list[list[str]]) -> str:
     def line(cells: list[str]) -> str:
         return "|" + "|".join(f" {c.ljust(widths[i])} " for i, c in enumerate(cells)) + "|"
 
-    return "\n".join([
-        line(headers),
-        "|" + "|".join("-" * (w + 2) for w in widths) + "|",
-        *(line(row) for row in rows),
-    ])
+    return "\n".join(
+        [
+            line(headers),
+            "|" + "|".join("-" * (w + 2) for w in widths) + "|",
+            *(line(row) for row in rows),
+        ]
+    )
 
 
 def _trim(value: str, limit: int = 72) -> str:
@@ -133,8 +147,9 @@ def _quote(sourced: SourcedFact, limit: int = 60) -> str:
     return f'"{text}"'
 
 
-def _render_fields(fields: list[str], by_field: dict[str, list[SourcedFact]],
-                   conflicted: set[str]) -> tuple[str, list[str], int]:
+def _render_fields(
+    fields: list[str], by_field: dict[str, list[SourcedFact]], conflicted: set[str]
+) -> tuple[str, list[str], int]:
     rows: list[list[str]] = []
     citations: list[str] = []
     gap_count = 0
@@ -150,10 +165,14 @@ def _render_fields(fields: list[str], by_field: dict[str, list[SourcedFact]],
         for sourced in members:
             label = name + (" ⚠" if name in conflicted else "")
             span = sourced.fact.span
-            rows.append([
-                label, _trim(sourced.display), sourced.document,
-                f"{_quote(sourced)} [{span.char_start}-{span.char_end}]",
-            ])
+            rows.append(
+                [
+                    label,
+                    _trim(sourced.display),
+                    sourced.document,
+                    f"{_quote(sourced)} [{span.char_start}-{span.char_end}]",
+                ]
+            )
             citations.append(sourced.citation)
 
     return _table(["Term", "Value", "Source", "Where it says so"], rows), citations, gap_count
@@ -162,23 +181,34 @@ def _render_fields(fields: list[str], by_field: dict[str, list[SourcedFact]],
 def _render_conflicts(conflicts: list[Conflict]) -> tuple[str, list[str], int]:
     if not conflicts:
         # The rarest output in this industry, and it has to be sayable.
-        return ("_No disagreements found. Every field the documents state is "
-                "stated consistently._", [], 0)
+        return (
+            "_No disagreements found. Every field the documents state is " "stated consistently._",
+            [],
+            0,
+        )
 
     blocks: list[str] = []
     citations: list[str] = []
     for conflict in sorted(conflicts, key=lambda c: (c.entity_key, c.field)):
-        rows = [[m.doc_type, m.document, _trim(m.display, 40),
-                 f"{_quote(m, 44)} [{m.fact.span.char_start}-{m.fact.span.char_end}]"]
-                for m in conflict.members]
+        rows = [
+            [
+                m.doc_type,
+                m.document,
+                _trim(m.display, 40),
+                f"{_quote(m, 44)} [{m.fact.span.char_start}-{m.fact.span.char_end}]",
+            ]
+            for m in conflict.members
+        ]
         citations.extend(m.citation for m in conflict.members)
         blocks.append(f"### {conflict.field}: {len(conflict.distinct_values)} different values")
         blocks.append("")
         blocks.append(_table(["Type", "Document", "Value", "Where it says so"], rows))
         blocks.append("")
         if conflict.proposed is not None:
-            blocks.append(f"**Suggested:** {_trim(conflict.proposed.display)} "
-                          f"(from {conflict.proposed.document})")
+            blocks.append(
+                f"**Suggested:** {_trim(conflict.proposed.display)} "
+                f"(from {conflict.proposed.document})"
+            )
         else:
             blocks.append("**Suggested:** none. The documents do not settle this.")
         blocks.append("")
@@ -186,14 +216,17 @@ def _render_conflicts(conflicts: list[Conflict]) -> tuple[str, list[str], int]:
         blocks.append("")
         # Said in the deliverable itself, not only in the code, because the
         # reader is the person who has to act on it.
-        blocks.append("_Still open. This is a suggestion put to a reviewer. "
-                      "No value has been resolved or applied._")
+        blocks.append(
+            "_Still open. This is a suggestion put to a reviewer. "
+            "No value has been resolved or applied._"
+        )
         blocks.append("")
     return "\n".join(blocks).rstrip(), citations, 0
 
 
-def _render_gaps(gaps: list[tuple[str, Gap]], cfg: DomainConfig,
-                 by_field: dict[str, list[SourcedFact]]) -> tuple[str, list[str], int]:
+def _render_gaps(
+    gaps: list[tuple[str, Gap]], cfg: DomainConfig, by_field: dict[str, list[SourcedFact]]
+) -> tuple[str, list[str], int]:
     rows: list[list[str]] = []
     for document, gap in sorted(gaps, key=lambda g: (g[0], g[1].field_name)):
         rows.append([gap.field_name, document, gap.reason, gap.detail or "no detail"])

@@ -66,6 +66,7 @@ Run it with:
 
     python -m app.mcp.server
 """
+
 from __future__ import annotations
 
 import json
@@ -107,8 +108,9 @@ def _result(call) -> str:
     except ops.NotFound as exc:
         return json.dumps({"error": "not_found", "detail": str(exc)}, indent=2)
     except ops.PileBusy as exc:
-        return json.dumps({"error": "pile_busy", "detail": str(exc),
-                           "written": "nothing"}, indent=2)
+        return json.dumps(
+            {"error": "pile_busy", "detail": str(exc), "written": "nothing"}, indent=2
+        )
     except ops.Invalid as exc:
         return json.dumps({"error": "invalid", "detail": str(exc)}, indent=2)
     except ops.SourceUnavailable as exc:
@@ -116,13 +118,15 @@ def _result(call) -> str:
         # this run was reading is gone or has changed, nothing was written, and
         # putting it back or sending the new version as an arrival are both
         # things the agent can go and do.
-        return json.dumps({"error": "source_unavailable", "detail": str(exc),
-                           "written": "nothing"}, indent=2)
+        return json.dumps(
+            {"error": "source_unavailable", "detail": str(exc), "written": "nothing"}, indent=2
+        )
     except ProviderError as exc:
         return json.dumps({"error": "provider", "detail": str(exc)}, indent=2)
 
 
 # ------------------------------------------------------------------ piles --
+
 
 @server.tool()
 def doctask_list_piles() -> str:
@@ -149,9 +153,11 @@ def doctask_list_documents(pile_id: str) -> str:
 
 # -------------------------------------------------------------------- runs --
 
+
 @server.tool()
-def doctask_start_run(pile_id: str, corpus: str = "pile_acme",
-                      domain: str = "vendor_contracts") -> str:
+def doctask_start_run(
+    pile_id: str, corpus: str = "pile_acme", domain: str = "vendor_contracts"
+) -> str:
     """Read a whole pile and halt at the review gate. Commits nothing.
 
     `corpus` is a directory under corpora/. Returns what the run found --
@@ -162,8 +168,7 @@ def doctask_start_run(pile_id: str, corpus: str = "pile_acme",
 
 
 @server.tool()
-def doctask_document_arrived(pile_id: str, document: str,
-                             domain: str = "vendor_contracts") -> str:
+def doctask_document_arrived(pile_id: str, document: str, domain: str = "vendor_contracts") -> str:
     """A new document lands in an existing pile. Produces a targeted update.
 
     `document` is a path under corpora/. Only the sections the new document
@@ -233,6 +238,7 @@ def doctask_abandon_run(run_id: str, abandoned_by: str, reason: str) -> str:
 
 # --------------------------------------------------------------- the gate --
 
+
 @server.tool()
 def doctask_list_proposals(run_id: str, status: str | None = None) -> str:
     """The items waiting for a decision, each with its evidence.
@@ -247,8 +253,7 @@ def doctask_list_proposals(run_id: str, status: str | None = None) -> str:
 
 
 @server.tool()
-def doctask_decide(run_id: str, decisions: list[dict[str, Any]],
-                   decided_by: str) -> str:
+def doctask_decide(run_id: str, decisions: list[dict[str, Any]], decided_by: str) -> str:
     """Approve and reject items individually, in one review.
 
     `decisions` is a list of {"proposal_id", "approved", "reason"}. Mixing
@@ -264,8 +269,7 @@ def doctask_decide(run_id: str, decisions: list[dict[str, Any]],
     'ignored' rather than silently overwriting a judgement something downstream
     may have acted on.
     """
-    return _result(lambda: ops.decide(run_id, decisions, decided_by,
-                                      decided_via="mcp"))
+    return _result(lambda: ops.decide(run_id, decisions, decided_by, decided_via="mcp"))
 
 
 @server.tool()
@@ -281,6 +285,7 @@ def doctask_commit(run_id: str) -> str:
 
 
 # ------------------------------------------------------------- the output --
+
 
 @server.tool()
 def doctask_get_register(pile_id: str, version: int | None = None) -> str:
@@ -318,8 +323,9 @@ def doctask_get_audit(pile_id: str) -> str:
 
 
 @server.tool()
-def doctask_upload_document(pile_id: str, filename: str, content_base64: str,
-                            domain: str = "vendor_contracts") -> str:
+def doctask_upload_document(
+    pile_id: str, filename: str, content_base64: str, domain: str = "vendor_contracts"
+) -> str:
     """Send a document the caller holds, rather than one already on the server.
 
     `content_base64` is the file's raw bytes, base64-encoded, which is how a
@@ -345,7 +351,7 @@ def doctask_upload_document(pile_id: str, filename: str, content_base64: str,
             # Not a transport error: the caller can fix this, and a decoder
             # that guessed at malformed input would ingest corrupt bytes and
             # report success.
-            raise ops.Invalid(f"content_base64 is not valid base64: {exc}")
+            raise ops.Invalid(f"content_base64 is not valid base64: {exc}") from exc
         return ops.upload(pile_id, filename, data, domain)
 
     return _result(run)

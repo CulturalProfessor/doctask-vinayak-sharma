@@ -1,4 +1,5 @@
 """Text extraction is where provenance either survives or quietly dies."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -33,7 +34,7 @@ def test_char_offsets_into_markdown_are_exact():
     assert len(pages) == 1
     text = pages[0].text
     start = text.index("USD 120")
-    assert text[start:start + 7] == "USD 120"
+    assert text[start : start + 7] == "USD 120"
 
 
 def test_extraction_preserves_line_wrapping_rather_than_reflowing():

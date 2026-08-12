@@ -13,6 +13,7 @@ part of any run. It exists for two situations that are both real:
     python -m scripts.reindex          # spans with no vector
     python -m scripts.reindex --all    # every span, after an embedder change
 """
+
 from __future__ import annotations
 
 import sys
@@ -37,11 +38,15 @@ def reindex(rebuild_all: bool = False) -> tuple[int, int]:
     condition = "" if rebuild_all else "AND embedding IS NULL"
     with transaction() as conn:
         while True:
-            rows = fetch_all(conn, f"""
+            rows = fetch_all(
+                conn,
+                f"""
                 SELECT id, text FROM span
                 WHERE id > %s {condition}
                 ORDER BY id LIMIT %s
-            """, (cursor, BATCH))
+            """,
+                (cursor, BATCH),
+            )
             if not rows:
                 break
             for row in rows:
@@ -50,17 +55,21 @@ def reindex(rebuild_all: bool = False) -> tuple[int, int]:
                 if vector is None:
                     skipped += 1
                     continue
-                execute(conn, "UPDATE span SET embedding = %s::vector WHERE id = %s",
-                        (vector_literal(vector), row["id"]))
+                execute(
+                    conn,
+                    "UPDATE span SET embedding = %s::vector WHERE id = %s",
+                    (vector_literal(vector), row["id"]),
+                )
                 embedded += 1
     return embedded, skipped
 
 
 if __name__ == "__main__":
     rebuild = "--all" in sys.argv
-    print(f"reindexing with {get_embedder().name}"
-          f"{' (every span)' if rebuild else ' (spans with no vector)'}")
+    print(
+        f"reindexing with {get_embedder().name}"
+        f"{' (every span)' if rebuild else ' (spans with no vector)'}"
+    )
     done, no_features = reindex(rebuild)
-    print(f"  {done} span(s) embedded, {no_features} skipped for having no "
-          f"alphanumeric text")
+    print(f"  {done} span(s) embedded, {no_features} skipped for having no " f"alphanumeric text")
     sys.exit(0)

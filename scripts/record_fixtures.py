@@ -9,12 +9,12 @@ The default model is priced at zero, so this costs nothing. Free tiers rate
 limit rather than bill, so 429s are expected and retried with backoff rather
 than treated as failures.
 """
+
 from __future__ import annotations
 
 import argparse
 import sys
 import time
-from pathlib import Path
 
 from app.domain.config import load_domain
 from app.ingest.formats import UnsupportedFormat, detect_format, extract_pages
@@ -32,8 +32,17 @@ MAX_RETRIES = 6
 # and the recording completed looking successful with two fixtures missing.
 # Retrying only on 429 meant capacity failures were silently written into the
 # corpus as escalations.
-_RETRYABLE = ("rate limit", "429", "resourceexhausted", "resource exhausted",
-              "temporarily unavailable", "502", "503", "overloaded", "capacity")
+_RETRYABLE = (
+    "rate limit",
+    "429",
+    "resourceexhausted",
+    "resource exhausted",
+    "temporarily unavailable",
+    "502",
+    "503",
+    "overloaded",
+    "capacity",
+)
 
 
 def with_backoff(label: str, fn, *args, **kwargs):
@@ -54,11 +63,12 @@ def with_backoff(label: str, fn, *args, **kwargs):
                 return result
             message = note
 
-        if not any(word in message.lower() for word in _RETRYABLE) \
-                or attempt == MAX_RETRIES:
+        if not any(word in message.lower() for word in _RETRYABLE) or attempt == MAX_RETRIES:
             raise ProviderError(f"{label}: {message}")
-        print(f"      provider busy on {label}, waiting {delay:.0f}s "
-              f"(attempt {attempt}/{MAX_RETRIES})")
+        print(
+            f"      provider busy on {label}, waiting {delay:.0f}s "
+            f"(attempt {attempt}/{MAX_RETRIES})"
+        )
         time.sleep(delay)
         delay *= 1.8
     raise ProviderError(f"gave up on {label}")
@@ -85,8 +95,14 @@ def main() -> int:
     print(f"recording against {getattr(provider, 'model', provider.name)}")
     print(f"corpus: {directory} ({len(paths)} documents)\n")
 
-    totals = {"classified": 0, "escalate": 0, "quarantine": 0, "unsupported": 0,
-              "facts": 0, "gaps": 0}
+    totals = {
+        "classified": 0,
+        "escalate": 0,
+        "quarantine": 0,
+        "unsupported": 0,
+        "facts": 0,
+        "gaps": 0,
+    }
     cost = 0.0
 
     for path in paths:
@@ -106,25 +122,37 @@ def main() -> int:
 
         text = extract_pages(data, fmt)[0].text
 
-        result = with_backoff(f"classify {path.name}", classify_document,
-                              provider, cfg, path.name, text)
+        result = with_backoff(
+            f"classify {path.name}", classify_document, provider, cfg, path.name, text
+        )
         cost += result.usage.cost_usd
         totals[result.path if result.path in totals else "classified"] += 1
-        print(f"      classify -> {result.path}: {result.doc_type} "
-              f"(confidence {result.confidence:.2f})")
+        print(
+            f"      classify -> {result.path}: {result.doc_type} "
+            f"(confidence {result.confidence:.2f})"
+        )
 
         if result.path != "classified":
             if result.note:
                 print(f"      note: {result.note[:150]}")
             continue
 
-        extraction = with_backoff(f"extract {path.name}", extract_document,
-                                  provider, cfg, result.doc_type, path.name, text)
+        extraction = with_backoff(
+            f"extract {path.name}",
+            extract_document,
+            provider,
+            cfg,
+            result.doc_type,
+            path.name,
+            text,
+        )
         cost += extraction.usage.cost_usd
         totals["facts"] += len(extraction.facts)
         totals["gaps"] += len(extraction.gaps)
-        print(f"      extract  -> {len(extraction.facts)} facts, "
-              f"{len(extraction.gaps)} gaps, entity={extraction.entity_key}")
+        print(
+            f"      extract  -> {len(extraction.facts)} facts, "
+            f"{len(extraction.gaps)} gaps, entity={extraction.entity_key}"
+        )
         for fact in extraction.facts:
             shown = fact.normalised.canonical if fact.normalised else fact.value_raw
             print(f"          {fact.field_name:24} {shown:22} [{fact.span.method}]")

@@ -10,9 +10,11 @@ which is nothing next to the document it came from.
 threshold in the configuration is easier to reason about when larger means
 closer.
 """
+
 from __future__ import annotations
 
-from typing import Any, Iterable, Sequence
+from collections.abc import Iterable, Sequence
+from typing import Any
 
 import psycopg
 
@@ -27,8 +29,10 @@ def vector_literal(values: Sequence[float]) -> str:
 
 # ------------------------------------------------------------------- spans --
 
-def search_spans(conn: psycopg.Connection, pile_id: str, query: str,
-                 limit: int = 8, min_similarity: float = 0.0) -> list[dict[str, Any]]:
+
+def search_spans(
+    conn: psycopg.Connection, pile_id: str, query: str, limit: int = 8, min_similarity: float = 0.0
+) -> list[dict[str, Any]]:
     """The passages in this pile that read most like `query`.
 
     Returns sources, never conclusions. Each hit carries the document, page and
@@ -52,7 +56,9 @@ def search_spans(conn: psycopg.Connection, pile_id: str, query: str,
     except ValueError:
         return []
 
-    return fetch_all(conn, """
+    return fetch_all(
+        conn,
+        """
         SELECT s.id, d.filename AS document, d.doc_type, s.page_no,
                s.char_start, s.char_end, s.text,
                1 - (s.embedding <=> %s::vector) AS similarity
@@ -63,7 +69,9 @@ def search_spans(conn: psycopg.Connection, pile_id: str, query: str,
           AND 1 - (s.embedding <=> %s::vector) >= %s
         ORDER BY s.embedding <=> %s::vector
         LIMIT %s
-    """, (vector, pile_id, vector, min_similarity, vector, limit))
+    """,
+        (vector, pile_id, vector, min_similarity, vector, limit),
+    )
 
 
 def index_span(conn: psycopg.Connection, span_id: str, text: str) -> bool:
@@ -78,21 +86,28 @@ def index_span(conn: psycopg.Connection, span_id: str, text: str) -> bool:
     vector = embed_or_none(text)
     if vector is None:
         return False
-    execute(conn, "UPDATE span SET embedding = %s::vector WHERE id = %s",
-            (vector_literal(vector), span_id))
+    execute(
+        conn,
+        "UPDATE span SET embedding = %s::vector WHERE id = %s",
+        (vector_literal(vector), span_id),
+    )
     return True
 
 
 def unindexed_spans(conn: psycopg.Connection, limit: int = 500) -> list[dict[str, Any]]:
-    return fetch_all(conn, """
+    return fetch_all(
+        conn,
+        """
         SELECT id, text FROM span WHERE embedding IS NULL LIMIT %s
-    """, (limit,))
+    """,
+        (limit,),
+    )
 
 
 # ---------------------------------------------------------------- entities --
 
-def remember_entity(conn: psycopg.Connection, pile_id: str, entity_key: str,
-                    name: str) -> None:
+
+def remember_entity(conn: psycopg.Connection, pile_id: str, entity_key: str, name: str) -> None:
     """Record the name an engagement was first known by, and its vector.
 
     Upsert on the key rather than insert: the same engagement is resolved on
@@ -106,15 +121,20 @@ def remember_entity(conn: psycopg.Connection, pile_id: str, entity_key: str,
     vector = embed_or_none(name)
     if vector is None:
         return
-    execute(conn, """
+    execute(
+        conn,
+        """
         INSERT INTO entity_name (pile_id, entity_key, name, embedding)
         VALUES (%s, %s, %s, %s::vector)
         ON CONFLICT (pile_id, entity_key) DO NOTHING
-    """, (pile_id, entity_key, name[:500], vector_literal(vector)))
+    """,
+        (pile_id, entity_key, name[:500], vector_literal(vector)),
+    )
 
 
-def nearest_entity(conn: psycopg.Connection, pile_id: str, name: str,
-                   min_similarity: float = 0.55) -> dict[str, Any] | None:
+def nearest_entity(
+    conn: psycopg.Connection, pile_id: str, name: str, min_similarity: float = 0.55
+) -> dict[str, Any] | None:
     """The engagement in this pile whose name reads most like `name`.
 
     Returns `None` when nothing clears the threshold, which is the common case
@@ -127,34 +147,45 @@ def nearest_entity(conn: psycopg.Connection, pile_id: str, name: str,
     except ValueError:
         return None
 
-    return fetch_one(conn, """
+    return fetch_one(
+        conn,
+        """
         SELECT entity_key, name, 1 - (embedding <=> %s::vector) AS similarity
         FROM entity_name
         WHERE pile_id = %s
           AND 1 - (embedding <=> %s::vector) >= %s
         ORDER BY embedding <=> %s::vector
         LIMIT 1
-    """, (vector, pile_id, vector, min_similarity, vector))
+    """,
+        (vector, pile_id, vector, min_similarity, vector),
+    )
 
 
 def entity_names(conn: psycopg.Connection, pile_id: str) -> list[dict[str, Any]]:
-    return fetch_all(conn, """
+    return fetch_all(
+        conn,
+        """
         SELECT entity_key, name, first_seen FROM entity_name
         WHERE pile_id = %s ORDER BY first_seen
-    """, (pile_id,))
+    """,
+        (pile_id,),
+    )
 
 
 def index_status(conn: psycopg.Connection, pile_id: str) -> dict[str, Any]:
     """What is actually indexed, for a caller that wants to know before it
     trusts an empty search result."""
-    row = fetch_one(conn, """
+    row = fetch_one(
+        conn,
+        """
         SELECT count(*) AS spans,
                count(s.embedding) AS embedded
         FROM span s JOIN document d ON d.id = s.document_id
         WHERE d.pile_id = %s
-    """, (pile_id,))
-    names = fetch_one(conn, "SELECT count(*) AS n FROM entity_name WHERE pile_id = %s",
-                      (pile_id,))
+    """,
+        (pile_id,),
+    )
+    names = fetch_one(conn, "SELECT count(*) AS n FROM entity_name WHERE pile_id = %s", (pile_id,))
     return {
         "spans": int(row["spans"]) if row else 0,
         "spans_embedded": int(row["embedded"]) if row else 0,
@@ -174,6 +205,14 @@ def embed_texts(texts: Iterable[str]) -> list[str | None]:
     return out
 
 
-__all__ = ["vector_literal", "search_spans", "index_span", "unindexed_spans",
-           "remember_entity", "nearest_entity", "entity_names", "index_status",
-           "embed_texts"]
+__all__ = [
+    "embed_texts",
+    "entity_names",
+    "index_span",
+    "index_status",
+    "nearest_entity",
+    "remember_entity",
+    "search_spans",
+    "unindexed_spans",
+    "vector_literal",
+]

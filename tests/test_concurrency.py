@@ -19,6 +19,7 @@ What this must never do:
 Contention here is real: two child processes, one of which is made to stall
 inside a node so that the race happens on purpose rather than by luck.
 """
+
 from __future__ import annotations
 
 import json
@@ -39,7 +40,10 @@ STALL_SECONDS = 6.0
 def _spawn(*args: str) -> subprocess.Popen:
     return subprocess.Popen(
         [sys.executable, "-m", "tests.crashing_run", *args],
-        cwd=REPO_ROOT, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        cwd=REPO_ROOT,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
     )
 
 
@@ -70,8 +74,9 @@ def _await_stall(process: subprocess.Popen, timeout: float = 60) -> None:
 def contended(make_pile):
     """One pile, one run holding it, and a second run trying to take it."""
     pile = make_pile()
-    holder = _spawn("--pile", pile, "--stall-at-persist", "1",
-                    "--stall-seconds", str(STALL_SECONDS))
+    holder = _spawn(
+        "--pile", pile, "--stall-at-persist", "1", "--stall-seconds", str(STALL_SECONDS)
+    )
     try:
         _await_stall(holder)
         yield pile, holder
@@ -98,12 +103,10 @@ def test_a_refused_run_leaves_no_trace(conn, contended):
     started is not recorded as one. A `running` row that will never move is a
     lie to anyone reading the run list afterwards."""
     pile, holder = contended
-    before = fetch_one(conn, "SELECT count(*) AS n FROM run WHERE pile_id = %s",
-                       (pile,))["n"]
+    before = fetch_one(conn, "SELECT count(*) AS n FROM run WHERE pile_id = %s", (pile,))["n"]
     _finish(_spawn("--pile", pile, "--wait-seconds", "0.5"))
     conn.rollback()  # see the other connections' commits, not a stale snapshot
-    after = fetch_one(conn, "SELECT count(*) AS n FROM run WHERE pile_id = %s",
-                      (pile,))["n"]
+    after = fetch_one(conn, "SELECT count(*) AS n FROM run WHERE pile_id = %s", (pile,))["n"]
 
     assert after == before == 1
     _finish(holder, timeout=STALL_SECONDS + 120)
@@ -118,12 +121,13 @@ def test_the_pile_is_not_doubled(conn, contended):
 
     conn.rollback()
     assert first["facts"] == 48
-    assert fetch_one(conn, "SELECT count(*) AS n FROM fact WHERE pile_id = %s",
-                     (pile,))["n"] == 48
-    assert fetch_one(conn, "SELECT count(*) AS n FROM document WHERE pile_id = %s",
-                     (pile,))["n"] == 7
-    assert fetch_one(conn, "SELECT count(*) AS n FROM proposal WHERE pile_id = %s",
-                     (pile,))["n"] == 13
+    assert fetch_one(conn, "SELECT count(*) AS n FROM fact WHERE pile_id = %s", (pile,))["n"] == 48
+    assert (
+        fetch_one(conn, "SELECT count(*) AS n FROM document WHERE pile_id = %s", (pile,))["n"] == 7
+    )
+    assert (
+        fetch_one(conn, "SELECT count(*) AS n FROM proposal WHERE pile_id = %s", (pile,))["n"] == 13
+    )
 
 
 def test_a_run_on_another_pile_is_not_blocked(conn, make_pile, contended):
@@ -160,10 +164,14 @@ def test_a_run_waiting_at_the_gate_does_not_hold_the_pile(conn, make_pile):
     assert second["status"] == "no_change"
 
     conn.rollback()
-    duplicated = fetch_all(conn, """
+    duplicated = fetch_all(
+        conn,
+        """
         SELECT kind, summary, count(*) AS n FROM proposal WHERE pile_id = %s
         GROUP BY kind, summary HAVING count(*) > 1
-    """, (pile,))
+    """,
+        (pile,),
+    )
     assert duplicated == [], "the second run put the same items up again"
 
 
@@ -201,7 +209,7 @@ def test_losing_an_ingest_race_reports_a_duplicate_rather_than_crashing(pile):
             try:
                 outcome["result"] = ingest_bytes(second, pile, "notice.md", data)
                 second.commit()
-            except Exception as exc:  # noqa: BLE001 -- the failure is the finding
+            except Exception as exc:
                 outcome["error"] = exc
 
         blocked = threading.Thread(target=losing_ingest)
@@ -218,8 +226,9 @@ def test_losing_an_ingest_race_reports_a_duplicate_rather_than_crashing(pile):
         assert loser.document_id == winner.document_id
 
         with second.cursor() as cur:
-            cur.execute("SELECT count(*) AS n FROM page WHERE document_id = %s",
-                        (winner.document_id,))
+            cur.execute(
+                "SELECT count(*) AS n FROM page WHERE document_id = %s", (winner.document_id,)
+            )
             assert cur.fetchone()["n"] == 1, "the document's text was written twice"
     finally:
         first.close()
@@ -232,20 +241,25 @@ def test_a_process_that_dies_holding_the_pile_releases_it(conn, make_pile):
     recoverable crash into a stuck pile."""
     pile = make_pile()
     killed = subprocess.run(
-        [sys.executable, "-m", "tests.crashing_run", "--pile", pile,
-         "--die-at-persist", "2"],
-        cwd=REPO_ROOT, capture_output=True, text=True, timeout=180,
+        [sys.executable, "-m", "tests.crashing_run", "--pile", pile, "--die-at-persist", "2"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        timeout=180,
     )
     assert killed.returncode == -9
 
     conn.rollback()
-    run_id = fetch_one(conn, """
+    run_id = fetch_one(
+        conn,
+        """
         SELECT id::text AS id FROM run WHERE pile_id = %s
         ORDER BY started_at DESC LIMIT 1
-    """, (pile,))["id"]
+    """,
+        (pile,),
+    )["id"]
 
     # No waiting: the lock went when the socket did.
-    resumed = _finish(_spawn("--pile", pile, "--resume", run_id,
-                             "--wait-seconds", "0"))
+    resumed = _finish(_spawn("--pile", pile, "--resume", run_id, "--wait-seconds", "0"))
     assert resumed["status"] == "awaiting_approval"
     assert resumed["facts"] == 48

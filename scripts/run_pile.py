@@ -10,6 +10,7 @@ system claims to do -- see PROGRESS.md.
 
 picks a stopped run back up from its checkpoint.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -21,8 +22,8 @@ from app.graph import pipeline
 from app.ingest.ingest import ensure_pile
 from app.llm.base import get_provider
 from app.settings import REPO_ROOT
-from app.store.engine import transaction
 from app.store import repository as repo
+from app.store.engine import transaction
 
 
 def _print_report(run_id: str) -> None:
@@ -31,23 +32,27 @@ def _print_report(run_id: str) -> None:
 
     print("\nstages")
     for row in report["stages"]:
-        print(f"  {row['stage']:<16} {row['calls']:>3} entries  {row['ms'] or 0:>6} ms  "
-              f"{row['tokens_in']:>7} in  {row['tokens_out']:>6} out  "
-              f"${float(row['cost_usd']):.4f}   {','.join(sorted(row['paths']))}")
+        print(
+            f"  {row['stage']:<16} {row['calls']:>3} entries  {row['ms'] or 0:>6} ms  "
+            f"{row['tokens_in']:>7} in  {row['tokens_out']:>6} out  "
+            f"${float(row['cost_usd']):.4f}   {','.join(sorted(row['paths']))}"
+        )
     totals = report["totals"]
-    print(f"  {'TOTAL':<16} {'':>3}          {totals['ms']:>6} ms  "
-          f"{totals['tokens_in']:>7} in  {totals['tokens_out']:>6} out  "
-          f"${float(totals['cost_usd']):.4f}")
+    print(
+        f"  {'TOTAL':<16} {'':>3}          {totals['ms']:>6} ms  "
+        f"{totals['tokens_in']:>7} in  {totals['tokens_out']:>6} out  "
+        f"${float(totals['cost_usd']):.4f}"
+    )
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--pile", default="pile_acme", help="corpus directory name")
     parser.add_argument("--domain", default="vendor_contracts")
-    parser.add_argument("--arrival", default=None,
-                        help="a single document arriving into the pile")
-    parser.add_argument("--resume", default=None, metavar="RUN_ID",
-                        help="continue a run that stopped")
+    parser.add_argument("--arrival", default=None, help="a single document arriving into the pile")
+    parser.add_argument(
+        "--resume", default=None, metavar="RUN_ID", help="continue a run that stopped"
+    )
     parser.add_argument("--out", default=None, help="write the register here")
     args = parser.parse_args()
 
@@ -58,8 +63,10 @@ def main() -> int:
         result = pipeline.resume(provider, cfg, run_id=args.resume)
         print(f"resumed run {result.run_id}: {result.status}")
         if result.replayed_calls:
-            print(f"  {result.replayed_calls} model call(s) replayed from the run's "
-                  f"ledger rather than re-issued")
+            print(
+                f"  {result.replayed_calls} model call(s) replayed from the run's "
+                f"ledger rather than re-issued"
+            )
     else:
         with transaction() as conn:
             pile_id = ensure_pile(conn, args.pile, args.domain)
@@ -82,9 +89,11 @@ def main() -> int:
 
     _print_report(result.run_id)
 
-    print(f"\nfacts {result.fact_count}   gaps {len(result.gaps)}   "
-          f"conflicts {len(result.conflicts)}   "
-          f"quarantined {len(result.quarantined)}   escalated {len(result.escalated)}")
+    print(
+        f"\nfacts {result.fact_count}   gaps {len(result.gaps)}   "
+        f"conflicts {len(result.conflicts)}   "
+        f"quarantined {len(result.quarantined)}   escalated {len(result.escalated)}"
+    )
     print(f"model calls issued {result.model_calls}   replayed {result.replayed_calls}")
 
     for row in result.quarantined:
@@ -101,10 +110,11 @@ def main() -> int:
         print("\nno disagreements found")
 
     delta = result.delta
-    print(f"\ndelta  changed {delta.changed}  added {delta.added}  "
-          f"unchanged {delta.unchanged}")
-    print(f"gate   {len(result.gate.pending)} item(s) awaiting a decision "
-          f"(status: {result.status})")
+    print(f"\ndelta  changed {delta.changed}  added {delta.added}  " f"unchanged {delta.unchanged}")
+    print(
+        f"gate   {len(result.gate.pending)} item(s) awaiting a decision "
+        f"(status: {result.status})"
+    )
     if result.note:
         print(f"       {result.note}")
 
@@ -113,8 +123,10 @@ def main() -> int:
         target.write_text(result.register.render())
         print(f"\nregister written to {target}")
         for section in result.register.sections:
-            print(f"  {section.key:<16} {section.content_hash[:12]}  "
-                  f"{len(section.citations):>3} citations  {section.gap_count} gaps")
+            print(
+                f"  {section.key:<16} {section.content_hash[:12]}  "
+                f"{len(section.citations):>3} citations  {section.gap_count} gaps"
+            )
     return 0
 
 

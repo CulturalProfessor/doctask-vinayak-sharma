@@ -6,6 +6,7 @@ that are awkward to obtain on demand: malformed JSON, a quote that is not in the
 document, a type outside the taxonomy, low confidence. Those are the branches
 that matter, and they are branches in our code, not in the model's.
 """
+
 from __future__ import annotations
 
 import json
@@ -21,8 +22,9 @@ class ScriptedProvider:
         self.queue: list[Any] = list(responses)
         self.calls: list[tuple[str, str, str]] = []
 
-    def complete(self, *, purpose: str, system: str, user: str,
-                 max_tokens: int = 2048) -> Completion:
+    def complete(
+        self, *, purpose: str, system: str, user: str, max_tokens: int = 2048
+    ) -> Completion:
         self.calls.append((purpose, system, user))
         if not self.queue:
             raise AssertionError(
@@ -33,16 +35,16 @@ class ScriptedProvider:
         if isinstance(item, BaseException):
             raise item
         text = item if isinstance(item, str) else json.dumps(item)
-        return Completion(text, Usage(tokens_in=100, tokens_out=40, cost_usd=0.0012,
-                                      model="scripted"))
+        return Completion(
+            text, Usage(tokens_in=100, tokens_out=40, cost_usd=0.0012, model="scripted")
+        )
 
     @property
     def purposes(self) -> list[str]:
         return [call[0] for call in self.calls]
 
 
-def classification(doc_type: str | None, confidence: float, *,
-                   instructions: bool = False) -> dict:
+def classification(doc_type: str | None, confidence: float, *, instructions: bool = False) -> dict:
     return {
         "doc_type": doc_type,
         "confidence": confidence,

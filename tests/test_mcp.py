@@ -16,6 +16,7 @@ What this must never do:
 Tools are called through the server's own dispatch rather than by calling the
 Python functions underneath, because the wiring is the part that can be wrong.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -25,7 +26,7 @@ import pytest
 
 from app import operations as ops
 from app.mcp.server import server
-from app.store.engine import fetch_all, fetch_one
+from app.store.engine import fetch_one
 
 pytestmark = pytest.mark.db
 
@@ -33,8 +34,7 @@ pytestmark = pytest.mark.db
 def call(name: str, **arguments) -> dict:
     """Invoke one MCP tool and read its result as the caller would."""
     result = asyncio.run(server.call_tool(name, arguments))
-    text = "".join(block.text for block in result.content
-                   if getattr(block, "type", None) == "text")
+    text = "".join(block.text for block in result.content if getattr(block, "type", None) == "text")
     return json.loads(text)
 
 
@@ -47,6 +47,7 @@ def reviewed(pile):
 
 
 # ------------------------------------------------------------ the whole flow --
+
 
 def test_a_machine_drives_a_pile_from_nothing_to_a_committed_register(conn, reviewed):
     """Start, review with mixed decisions, commit, read the result. No UI, no
@@ -62,24 +63,23 @@ def test_a_machine_drives_a_pile_from_nothing_to_a_committed_register(conn, revi
     # returning an empty register that reads like a real one.
     assert call("doctask_get_register", pile_id=pile)["error"] == "not_found"
 
-    proposals = call("doctask_list_proposals", run_id=run_id,
-                     status="pending")["proposals"]
+    proposals = call("doctask_list_proposals", run_id=run_id, status="pending")["proposals"]
     assert len(proposals) == 13
     assert {p["kind"] for p in proposals} == {"section_patch", "conflict", "finding"}
 
     # One rejection among eight approvals, in a single review.
     decisions = []
     for proposal in proposals:
-        reject = (proposal["kind"] == "conflict"
-                  and proposal["payload"]["field"] == "hourly_rate")
-        decisions.append({
-            "proposal_id": proposal["id"], "approved": not reject,
-            "reason": "the rate change is historical" if reject else None,
-        })
-    outcome = call("doctask_decide", run_id=run_id, decisions=decisions,
-                   decided_by="vinayak")
-    assert outcome == {"run_id": run_id, "approved": 12, "rejected": 1,
-                       "ignored": 0, "pending": 0}
+        reject = proposal["kind"] == "conflict" and proposal["payload"]["field"] == "hourly_rate"
+        decisions.append(
+            {
+                "proposal_id": proposal["id"],
+                "approved": not reject,
+                "reason": "the rate change is historical" if reject else None,
+            }
+        )
+    outcome = call("doctask_decide", run_id=run_id, decisions=decisions, decided_by="vinayak")
+    assert outcome == {"run_id": run_id, "approved": 12, "rejected": 1, "ignored": 0, "pending": 0}
 
     committed = call("doctask_commit", run_id=run_id)
     assert committed["status"] == "committed"
@@ -106,18 +106,23 @@ def test_a_machines_review_is_recorded_as_a_machines_review(conn, reviewed):
     """Behaviour 3 says a person holds the gate; behaviour 4 says a machine must
     be able to drive approval. Both hold only if the record can tell them apart
     afterwards -- and the surface, not the caller, is what writes that down."""
-    pile, run = reviewed
+    _pile, run = reviewed
     proposals = call("doctask_list_proposals", run_id=run["run_id"])["proposals"]
-    call("doctask_decide", run_id=run["run_id"], decided_by="vinayak",
-         decisions=[{"proposal_id": proposals[0]["id"], "approved": True}])
+    call(
+        "doctask_decide",
+        run_id=run["run_id"],
+        decided_by="vinayak",
+        decisions=[{"proposal_id": proposals[0]["id"], "approved": True}],
+    )
 
     conn.rollback()
-    row = fetch_one(conn, "SELECT decided_by, decided_via FROM proposal WHERE id = %s",
-                    (proposals[0]["id"],))
-    assert row["decided_by"] == "vinayak"
-    assert row["decided_via"] == "mcp", (
-        "an approval that came through the machine interface must say so"
+    row = fetch_one(
+        conn, "SELECT decided_by, decided_via FROM proposal WHERE id = %s", (proposals[0]["id"],)
     )
+    assert row["decided_by"] == "vinayak"
+    assert (
+        row["decided_via"] == "mcp"
+    ), "an approval that came through the machine interface must say so"
 
 
 def test_a_decision_with_no_decider_is_refused(reviewed):
@@ -125,8 +130,12 @@ def test_a_decision_with_no_decider_is_refused(reviewed):
     on which client happened to make it."""
     _, run = reviewed
     proposals = call("doctask_list_proposals", run_id=run["run_id"])["proposals"]
-    refused = call("doctask_decide", run_id=run["run_id"], decided_by="  ",
-                   decisions=[{"proposal_id": proposals[0]["id"], "approved": True}])
+    refused = call(
+        "doctask_decide",
+        run_id=run["run_id"],
+        decided_by="  ",
+        decisions=[{"proposal_id": proposals[0]["id"], "approved": True}],
+    )
     assert refused["error"] == "invalid"
     assert "decider" in refused["detail"]
 
@@ -134,10 +143,14 @@ def test_a_decision_with_no_decider_is_refused(reviewed):
 def test_a_machine_can_resume_a_run(conn, reviewed):
     """Behaviour 2 reachable from the machine interface. A program driving this
     system needs the same recovery a person has."""
-    pile, run = reviewed
+    _pile, run = reviewed
     proposals = call("doctask_list_proposals", run_id=run["run_id"])["proposals"]
-    call("doctask_decide", run_id=run["run_id"], decided_by="vinayak",
-         decisions=[{"proposal_id": p["id"], "approved": True} for p in proposals])
+    call(
+        "doctask_decide",
+        run_id=run["run_id"],
+        decided_by="vinayak",
+        decisions=[{"proposal_id": p["id"], "approved": True} for p in proposals],
+    )
 
     resumed = call("doctask_resume", run_id=run["run_id"])
     assert resumed["status"] == "committed"
@@ -149,20 +162,22 @@ def test_the_incremental_update_is_drivable_too(conn, reviewed):
     changed is put up for review."""
     pile, run = reviewed
     proposals = call("doctask_list_proposals", run_id=run["run_id"])["proposals"]
-    call("doctask_decide", run_id=run["run_id"], decided_by="vinayak",
-         decisions=[{"proposal_id": p["id"], "approved": True} for p in proposals])
+    call(
+        "doctask_decide",
+        run_id=run["run_id"],
+        decided_by="vinayak",
+        decisions=[{"proposal_id": p["id"], "approved": True} for p in proposals],
+    )
     call("doctask_commit", run_id=run["run_id"])
 
-    update = call("doctask_document_arrived", pile_id=pile,
-                  document="arrivals/amendment_02.md")
+    update = call("doctask_document_arrived", pile_id=pile, document="arrivals/amendment_02.md")
     assert update["status"] == "awaiting_approval"
     assert update["changed"], "the amendment must move something"
     assert "billing" in update["unchanged"], "no invoice arrived"
     assert update["model_calls"] == 2, "an update should cost like an update"
 
     # Sending the same bytes again does nothing, and says so.
-    again = call("doctask_document_arrived", pile_id=pile,
-                 document="arrivals/amendment_02.md")
+    again = call("doctask_document_arrived", pile_id=pile, document="arrivals/amendment_02.md")
     assert again["status"] == "no_change"
     assert again["model_calls"] == 0
 
@@ -170,13 +185,13 @@ def test_the_incremental_update_is_drivable_too(conn, reviewed):
 def test_a_path_outside_the_corpus_is_refused(pile):
     """A caller supplying a path is a caller supplying a path, and one of these
     surfaces is driven by a model reading documents that may ask it to."""
-    refused = call("doctask_document_arrived", pile_id=pile,
-                   document="../../../etc/passwd")
+    refused = call("doctask_document_arrived", pile_id=pile, document="../../../etc/passwd")
     assert refused["error"] == "invalid"
     assert "outside corpora" in refused["detail"]
 
 
 # ------------------------------------------------------------------ parity --
+
 
 def test_every_operation_is_reachable_from_the_machine_interface():
     """The structural claim behind behaviour 4: nothing the system can do is
@@ -209,8 +224,7 @@ def test_every_operation_is_reachable_from_the_machine_interface():
     }
     operations = {name for name in ops.__all__ if not name[0].isupper()}
     assert set(expected) == operations, (
-        "an operation was added or removed without the machine interface "
-        "following it"
+        "an operation was added or removed without the machine interface " "following it"
     )
     assert set(expected.values()) <= tools
 
@@ -235,18 +249,35 @@ def test_the_server_speaks_the_protocol_over_stdio():
 
     from tests.conftest import REPO_ROOT
 
-    handshake = "\n".join(json.dumps(message) for message in [
-        {"jsonrpc": "2.0", "id": 1, "method": "initialize",
-         "params": {"protocolVersion": "2025-06-18", "capabilities": {},
-                    "clientInfo": {"name": "test", "version": "0"}}},
-        {"jsonrpc": "2.0", "method": "notifications/initialized"},
-        {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}},
-    ]) + "\n"
+    handshake = (
+        "\n".join(
+            json.dumps(message)
+            for message in [
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "initialize",
+                    "params": {
+                        "protocolVersion": "2025-06-18",
+                        "capabilities": {},
+                        "clientInfo": {"name": "test", "version": "0"},
+                    },
+                },
+                {"jsonrpc": "2.0", "method": "notifications/initialized"},
+                {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}},
+            ]
+        )
+        + "\n"
+    )
 
     process = subprocess.Popen(
         [sys.executable, "-m", "app.mcp.server"],
-        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-        cwd=REPO_ROOT, text=True, bufsize=1,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        cwd=REPO_ROOT,
+        text=True,
+        bufsize=1,
     )
     # A server that answers neither message and never exits would otherwise hang
     # the suite forever, so the deadline is enforced by killing it -- which ends
@@ -268,19 +299,22 @@ def test_the_server_speaks_the_protocol_over_stdio():
         process.kill()
         process.wait(timeout=30)
 
-    assert any(r.get("id") == 2 for r in replies), (
-        f"the server never answered tools/list; it said: {replies}"
-    )
+    assert any(
+        r.get("id") == 2 for r in replies
+    ), f"the server never answered tools/list; it said: {replies}"
     initialise = next(r for r in replies if r.get("id") == 1)
     listing = next(r for r in replies if r.get("id") == 2)
 
     assert initialise["result"]["serverInfo"]["name"] == "doctask"
-    assert "never instruction" in initialise["result"]["instructions"], (
-        "a client should be told documents are evidence before it reads any"
-    )
+    assert (
+        "never instruction" in initialise["result"]["instructions"]
+    ), "a client should be told documents are evidence before it reads any"
     assert {tool["name"] for tool in listing["result"]["tools"]} >= {
-        "doctask_start_run", "doctask_list_proposals", "doctask_decide",
-        "doctask_commit", "doctask_resume",
+        "doctask_start_run",
+        "doctask_list_proposals",
+        "doctask_decide",
+        "doctask_commit",
+        "doctask_resume",
     }
 
 
@@ -295,6 +329,6 @@ def test_the_surfaces_share_one_implementation():
         source = module.__file__
         with open(source) as handle:
             text = handle.read()
-        assert "app.graph" not in text and "from app.store" not in text, (
-            f"{source} reaches past app.operations into the machinery"
-        )
+        assert (
+            "app.graph" not in text and "from app.store" not in text
+        ), f"{source} reaches past app.operations into the machinery"

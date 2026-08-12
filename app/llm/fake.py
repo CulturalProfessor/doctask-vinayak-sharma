@@ -8,6 +8,7 @@ passes here is a test against real model output, replayed.
 If a call has no recording, it fails loudly with the exact filename to create.
 Silently inventing a plausible answer would make the suite prove nothing.
 """
+
 from __future__ import annotations
 
 import json
@@ -31,8 +32,9 @@ class FakeProvider(Provider):
     def path_for(self, key: str) -> Path:
         return self.root / f"{key}.json"
 
-    def complete(self, *, purpose: str, system: str, user: str,
-                 max_tokens: int = 2048) -> Completion:
+    def complete(
+        self, *, purpose: str, system: str, user: str, max_tokens: int = 2048
+    ) -> Completion:
         key = call_key(purpose, system, user)
         self.calls.append(key)
         path = self.path_for(key)
@@ -56,24 +58,27 @@ class FakeProvider(Provider):
         )
 
 
-def record(purpose: str, system: str, user: str, completion: Completion,
-           root: Path | None = None) -> Path:
+def record(
+    purpose: str, system: str, user: str, completion: Completion, root: Path | None = None
+) -> Path:
     """Persist a live response so the fake can replay it offline."""
     root = root or settings.fixture_root
     root.mkdir(parents=True, exist_ok=True)
     path = root / f"{call_key(purpose, system, user)}.json"
-    path.write_text(json.dumps(
-        {
-            "purpose": purpose,
-            "prompt_preview": user[:500],
-            "text": completion.text,
-            "usage": {
-                "tokens_in": completion.usage.tokens_in,
-                "tokens_out": completion.usage.tokens_out,
-                "cost_usd": completion.usage.cost_usd,
-                "model": completion.usage.model,
+    path.write_text(
+        json.dumps(
+            {
+                "purpose": purpose,
+                "prompt_preview": user[:500],
+                "text": completion.text,
+                "usage": {
+                    "tokens_in": completion.usage.tokens_in,
+                    "tokens_out": completion.usage.tokens_out,
+                    "cost_usd": completion.usage.cost_usd,
+                    "model": completion.usage.model,
+                },
             },
-        },
-        indent=2,
-    ))
+            indent=2,
+        )
+    )
     return path

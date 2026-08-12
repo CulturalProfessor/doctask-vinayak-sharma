@@ -10,6 +10,7 @@ survive all the way through classification, extraction, span-location and
 normalisation -- because if any stage loses them, the rest of the system has
 nothing to find.
 """
+
 from __future__ import annotations
 
 from decimal import Decimal
@@ -43,12 +44,15 @@ def understood(cfg):
             classification = classify_document(provider, cfg, path.name, text)
             extraction = (
                 extract_document(provider, cfg, classification.doc_type, path.name, text)
-                if classification.path == "classified" else None
+                if classification.path == "classified"
+                else None
             )
         except MissingFixture as exc:
             pytest.skip(f"fixtures not recorded: {exc}")
         out[path.name] = {
-            "classification": classification, "extraction": extraction, "text": text,
+            "classification": classification,
+            "extraction": extraction,
+            "text": text,
         }
     return out
 
@@ -62,6 +66,7 @@ def _value(understood, filename, field):
 
 
 # ------------------------------------------------------------- the whole run --
+
 
 def test_every_document_is_classified(understood):
     expected = {
@@ -91,7 +96,7 @@ def test_every_extracted_fact_carries_a_locatable_span(understood):
     for name, state in understood.items():
         text = state["text"]
         for fact in state["extraction"].facts:
-            assert text[fact.span.char_start:fact.span.char_end] == fact.span.text, name
+            assert text[fact.span.char_start : fact.span.char_end] == fact.span.text, name
             total += 1
     assert total >= 40, f"only {total} facts extracted; the corpus should yield more"
 
@@ -110,6 +115,7 @@ def test_every_document_lands_in_one_engagement(understood):
 
 # ------------------------------------------ the disagreements must survive --
 
+
 def test_the_rate_change_is_visible_across_three_documents(understood):
     """The pile's central conflict: the MSA says 120, amendment 1 raised it to
     135 from June, and invoice 1043 billed July at the old 120."""
@@ -125,7 +131,7 @@ def test_the_rate_change_is_visible_across_three_documents(understood):
 
 
 def test_the_msa_rate_was_only_found_because_matching_tolerates_wrapping(understood):
-    """"USD 120 per hour" is "USD 120 per\\nhour" in the source. An exact-match
+    """ "USD 120 per hour" is "USD 120 per\\nhour" in the source. An exact-match
     matcher would have dropped the single most important value in the pile and
     the demo's central conflict would never surface."""
     msa = _value(understood, "msa_acme_2026.md", "hourly_rate")
@@ -135,10 +141,8 @@ def test_the_msa_rate_was_only_found_because_matching_tolerates_wrapping(underst
 
 def test_the_payment_terms_disagreement_survives(understood):
     """MSA says 30 days; invoice 1043 states Net 45."""
-    assert _value(understood, "msa_acme_2026.md",
-                  "payment_terms_days").normalised.number == 30
-    assert _value(understood, "invoice_1043.txt",
-                  "payment_terms_days").normalised.number == 45
+    assert _value(understood, "msa_acme_2026.md", "payment_terms_days").normalised.number == 30
+    assert _value(understood, "invoice_1043.txt", "payment_terms_days").normalised.number == 45
 
 
 def test_the_hours_cap_breach_is_present_in_the_facts(understood):
@@ -155,22 +159,25 @@ def test_the_hours_cap_breach_is_present_in_the_facts(understood):
 
 def test_the_short_notice_period_is_present_in_the_facts(understood):
     """The agreement requires 60 days; the notice gives 30."""
-    required = _value(understood, "msa_acme_2026.md",
-                      "termination_notice_days").normalised.number
-    given = _value(understood, "notice_nonrenewal.md",
-                   "notice_period_days").normalised.number
+    required = _value(understood, "msa_acme_2026.md", "termination_notice_days").normalised.number
+    given = _value(understood, "notice_nonrenewal.md", "notice_period_days").normalised.number
     assert required == 60
     assert given == 30
 
 
 def test_the_liability_cap_was_raised_by_the_amendment(understood):
-    assert _value(understood, "msa_acme_2026.md",
-                  "liability_cap").normalised.canonical == "USD 250000.00"
-    assert _value(understood, "amendment_01.md",
-                  "liability_cap").normalised.canonical == "USD 500000.00"
+    assert (
+        _value(understood, "msa_acme_2026.md", "liability_cap").normalised.canonical
+        == "USD 250000.00"
+    )
+    assert (
+        _value(understood, "amendment_01.md", "liability_cap").normalised.canonical
+        == "USD 500000.00"
+    )
 
 
 # ------------------------------------------------------------------ offline --
+
 
 def test_the_whole_run_used_only_recorded_responses(understood):
     """Nothing above reached the network. That is behaviour 7, demonstrated

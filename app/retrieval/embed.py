@@ -43,12 +43,14 @@ sounds: `span.embedding` is written once at extraction time and queried later,
 so a non-deterministic embedder would make a document's own text stop matching
 itself across a restart.
 """
+
 from __future__ import annotations
 
 import hashlib
 import math
 import re
-from typing import Iterable, Protocol, runtime_checkable
+from collections.abc import Iterable
+from typing import Protocol, runtime_checkable
 
 # Fixed by `span.embedding vector(1024)` in migration 001. A different width is
 # a migration, not a setting -- pgvector columns are typed, and a mismatch is an
@@ -134,7 +136,7 @@ def _features(text: str, ngram: int) -> Iterable[tuple[str, float]]:
     # under-counted.
     padded = f" {folded} "
     for i in range(len(padded) - ngram + 1):
-        gram = padded[i:i + ngram]
+        gram = padded[i : i + ngram]
         if gram.strip():
             yield f"g:{gram}", 1.0
 
@@ -169,5 +171,10 @@ def embed_or_none(text: str) -> list[float] | None:
         return None
 
 
-__all__ = ["DIMENSIONS", "Embedder", "HashedNgramEmbedder", "get_embedder",
-           "embed_or_none"]
+__all__ = [
+    "DIMENSIONS",
+    "Embedder",
+    "HashedNgramEmbedder",
+    "embed_or_none",
+    "get_embedder",
+]

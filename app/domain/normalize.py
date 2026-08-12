@@ -15,6 +15,7 @@ Two refusals are deliberate:
   country and April in another, and picking one silently makes a termination
   date wrong by a month.
 """
+
 from __future__ import annotations
 
 import re
@@ -30,10 +31,28 @@ _BARE_NUMBER = re.compile(r"(?<![\d.])(\d[\d,]*(?:\.\d+)?)")
 _CURRENCY_CODE = re.compile(r"\b(USD|EUR|GBP|INR|CAD|AUD|JPY)\b", re.I)
 
 _WORD_NUMBERS = {
-    "zero": 0, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6,
-    "seven": 7, "eight": 8, "nine": 9, "ten": 10, "eleven": 11, "twelve": 12,
-    "fifteen": 15, "twenty": 20, "thirty": 30, "forty": 40, "forty-five": 45,
-    "fifty": 50, "sixty": 60, "ninety": 90, "one hundred": 100,
+    "zero": 0,
+    "one": 1,
+    "two": 2,
+    "three": 3,
+    "four": 4,
+    "five": 5,
+    "six": 6,
+    "seven": 7,
+    "eight": 8,
+    "nine": 9,
+    "ten": 10,
+    "eleven": 11,
+    "twelve": 12,
+    "fifteen": 15,
+    "twenty": 20,
+    "thirty": 30,
+    "forty": 40,
+    "forty-five": 45,
+    "fifty": 50,
+    "sixty": 60,
+    "ninety": 90,
+    "one hundred": 100,
 }
 
 
@@ -49,6 +68,7 @@ class NormalisedValue:
     parsed but do not fully trust -- it still flows through, carrying its doubt,
     rather than being dropped or silently resolved.
     """
+
     raw: str
     canonical: str
     value_type: str
@@ -131,8 +151,11 @@ def parse_money(raw: str, cfg: dict[str, Any]) -> NormalisedValue | None:
         return None
     quantised = amount.quantize(Decimal("0.01"))
     return NormalisedValue(
-        raw=text, canonical=f"{currency} {quantised}", value_type="money",
-        number=quantised, currency=currency,
+        raw=text,
+        canonical=f"{currency} {quantised}",
+        value_type="money",
+        number=quantised,
+        currency=currency,
     )
 
 
@@ -155,13 +178,17 @@ def parse_duration(raw: str, cfg: dict[str, Any]) -> NormalisedValue | None:
             unit = units[phrase]
             break
     if unit is None:
-        return NormalisedValue(raw=text, canonical=plain(amount), value_type="number",
-                               number=amount)
+        return NormalisedValue(
+            raw=text, canonical=plain(amount), value_type="number", number=amount
+        )
 
     days = Decimal(str(to_days.get(unit, 1))) * amount
     return NormalisedValue(
-        raw=text, canonical=f"{plain(amount)} {unit}", value_type="duration",
-        number=amount, unit=unit,
+        raw=text,
+        canonical=f"{plain(amount)} {unit}",
+        value_type="duration",
+        number=amount,
+        unit=unit,
         note=f"{plain(days)} days equivalent" if unit != "days" else None,
     )
 
@@ -184,10 +211,18 @@ def parse_date(raw: str, cfg: dict[str, Any]) -> NormalisedValue | None:
             continue
         note = None
         if ambiguous and date_cfg.get("ambiguous_numeric_dates") == "flag":
-            note = (f"{text!r} is ambiguous: day/month order cannot be determined "
-                    f"from the document; read as {fmt}")
-        return NormalisedValue(raw=text, canonical=parsed.isoformat(), value_type="date",
-                               as_date=parsed, ambiguous=ambiguous, note=note)
+            note = (
+                f"{text!r} is ambiguous: day/month order cannot be determined "
+                f"from the document; read as {fmt}"
+            )
+        return NormalisedValue(
+            raw=text,
+            canonical=parsed.isoformat(),
+            value_type="date",
+            as_date=parsed,
+            ambiguous=ambiguous,
+            note=note,
+        )
     return None
 
 
@@ -217,14 +252,16 @@ def _number_value(raw: str) -> NormalisedValue | None:
     amount = parse_number(str(raw))
     if amount is None:
         return None
-    return NormalisedValue(raw=str(raw), canonical=plain(amount),
-                           value_type="number", number=amount)
+    return NormalisedValue(
+        raw=str(raw), canonical=plain(amount), value_type="number", number=amount
+    )
 
 
 def _text_value(raw: str) -> NormalisedValue:
     collapsed = " ".join(str(raw).split())
-    return NormalisedValue(raw=str(raw), canonical=collapsed.casefold(),
-                           value_type="text", _display=collapsed)
+    return NormalisedValue(
+        raw=str(raw), canonical=collapsed.casefold(), value_type="text", _display=collapsed
+    )
 
 
 def values_agree(a: NormalisedValue, b: NormalisedValue, cfg: dict[str, Any]) -> bool:
@@ -243,9 +280,11 @@ def values_agree(a: NormalisedValue, b: NormalisedValue, cfg: dict[str, Any]) ->
     if a.value_type == "duration":
         if a.unit != b.unit:
             return a.canonical == b.canonical
-        return _within(a.number, b.number,
-                       {"absolute": cfg.get("tolerance", {})
-                        .get("duration_days", {}).get("absolute", 0)})
+        return _within(
+            a.number,
+            b.number,
+            {"absolute": cfg.get("tolerance", {}).get("duration_days", {}).get("absolute", 0)},
+        )
     if a.value_type == "number":
         return _within(a.number, b.number, cfg.get("tolerance", {}).get("number", {}))
     return a.canonical == b.canonical

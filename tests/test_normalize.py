@@ -2,6 +2,7 @@
 decides what counts as a disagreement. Both directions are load-bearing: a
 false agreement hides a real conflict, a false disagreement floods the gate
 with noise until a reviewer stops reading it."""
+
 from __future__ import annotations
 
 from datetime import date
@@ -33,6 +34,7 @@ def recon():
 
 # ------------------------------------------------------------------ numbers --
 
+
 def test_prefers_the_parenthetical_numeral_contracts_actually_use():
     """Contracts write numbers twice. "thirty (30) days" must read as 30, and
     naive digit-scraping would work here but fail on "Section 6 ... sixty (60)"."""
@@ -60,6 +62,7 @@ def test_unparseable_number_is_none_not_zero():
 
 # -------------------------------------------------------------------- money --
 
+
 def test_money_normalises_across_notations(cfg):
     forms = ["USD 120", "$120", "US$120.00", "120 USD"]
     canon = {parse_money(f, cfg).canonical for f in forms}
@@ -80,6 +83,7 @@ def test_currencies_are_never_silently_converted(cfg, recon):
 
 # ----------------------------------------------------------------- duration --
 
+
 def test_duration_carries_its_unit(cfg):
     thirty = parse_duration("thirty (30) days", cfg)
     assert thirty.number == 30 and thirty.unit == "days"
@@ -97,6 +101,7 @@ def test_business_days_are_not_calendar_days(cfg):
 
 
 # --------------------------------------------------------------------- date --
+
 
 def test_reads_the_date_formats_the_corpus_uses(cfg):
     assert parse_date("1 March 2026", cfg).as_date == date(2026, 3, 1)
@@ -123,6 +128,7 @@ def test_unparseable_date_is_none(cfg):
 
 # --------------------------------------------------------------- agreement --
 
+
 def test_the_acme_rate_change_reads_as_a_disagreement(cfg, recon):
     """The conflict the demo corpus is built around: the MSA says 120, the
     amendment says 135, and invoice 1043 still bills 120."""
@@ -135,20 +141,27 @@ def test_the_acme_rate_change_reads_as_a_disagreement(cfg, recon):
 
 def test_rounding_is_not_a_disagreement(cfg, recon):
     """Without tolerance, a rounded invoice total floods the gate with noise."""
-    assert values_agree(parse_money("USD 19,200.00", cfg),
-                        parse_money("USD 19,200.01", cfg), recon) is True
+    assert (
+        values_agree(parse_money("USD 19,200.00", cfg), parse_money("USD 19,200.01", cfg), recon)
+        is True
+    )
 
 
 def test_a_real_difference_survives_tolerance(cfg, recon):
-    assert values_agree(parse_money("USD 19,200", cfg),
-                        parse_money("USD 21,000", cfg), recon) is False
+    assert (
+        values_agree(parse_money("USD 19,200", cfg), parse_money("USD 21,000", cfg), recon) is False
+    )
 
 
 def test_payment_terms_30_versus_45_disagree(cfg, recon):
     """Duration tolerance is zero on purpose: 30 days and 45 days are never the
     same payment term, however close a relative tolerance might call them."""
-    assert values_agree(parse_duration("thirty (30) days", cfg),
-                        parse_duration("Net 45 days", cfg), recon) is False
+    assert (
+        values_agree(
+            parse_duration("thirty (30) days", cfg), parse_duration("Net 45 days", cfg), recon
+        )
+        is False
+    )
 
 
 def test_text_agreement_ignores_case_and_spacing(cfg, recon):
@@ -158,11 +171,14 @@ def test_text_agreement_ignores_case_and_spacing(cfg, recon):
 
 
 def test_different_types_never_agree(cfg, recon):
-    assert values_agree(normalise("money", "120", cfg),
-                        normalise("number", "120", cfg), recon) is False
+    assert (
+        values_agree(normalise("money", "120", cfg), normalise("number", "120", cfg), recon)
+        is False
+    )
 
 
 # ---------------------------------------------------------------- dispatch --
+
 
 def test_normalise_dispatches_on_declared_type(cfg):
     assert normalise("money", "USD 135", cfg).canonical == "USD 135.00"

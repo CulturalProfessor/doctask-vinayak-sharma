@@ -25,6 +25,7 @@ being individually reviewable. Retry-then-skip on malformed extraction is a
 branch too; it lives inside the extract stage because the retry has to reuse the
 same prompt state.
 """
+
 from __future__ import annotations
 
 from langgraph.graph import END, START, StateGraph
@@ -52,22 +53,26 @@ def build_graph(nodes: Nodes, checkpointer):
     graph.add_edge(START, "ingest")
     graph.add_edge("ingest", "select_document")
 
-    graph.add_conditional_edges("select_document", nodes.after_select,
-                                {"classify": "classify", "reconcile": "reconcile"})
-    graph.add_conditional_edges("classify", nodes.after_classify,
-                                {"extract": "extract",
-                                 "select_document": "select_document"})
+    graph.add_conditional_edges(
+        "select_document", nodes.after_select, {"classify": "classify", "reconcile": "reconcile"}
+    )
+    graph.add_conditional_edges(
+        "classify",
+        nodes.after_classify,
+        {"extract": "extract", "select_document": "select_document"},
+    )
     graph.add_edge("extract", "select_document")
 
-    graph.add_conditional_edges("reconcile", nodes.after_reconcile,
-                                {"escalate_volume": "escalate_volume",
-                                 "compose": "compose"})
+    graph.add_conditional_edges(
+        "reconcile",
+        nodes.after_reconcile,
+        {"escalate_volume": "escalate_volume", "compose": "compose"},
+    )
     graph.add_edge("escalate_volume", "compose")
     graph.add_edge("compose", "examine")
     graph.add_edge("examine", "delta")
     graph.add_edge("delta", "propose")
-    graph.add_conditional_edges("propose", nodes.after_propose,
-                                {"gate": "gate", "done": END})
+    graph.add_conditional_edges("propose", nodes.after_propose, {"gate": "gate", "done": END})
     graph.add_edge("gate", "commit")
     graph.add_edge("commit", END)
 

@@ -4,6 +4,7 @@ Its own contract matters: same prompt must replay the same response, and a
 prompt with no recording must fail loudly rather than invent something. A fake
 that quietly improvises would make every downstream test prove nothing.
 """
+
 from __future__ import annotations
 
 import json

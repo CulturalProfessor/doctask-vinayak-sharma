@@ -3,6 +3,7 @@
 No Alembic. The schema is small enough that plain SQL files are easier to read
 than a migration DSL, and a reviewer can see the whole data model in one file.
 """
+
 from __future__ import annotations
 
 import sys

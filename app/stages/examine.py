@@ -44,12 +44,15 @@ playbook, and the seventh rule anyone writes will probably fit one of them.
     date_within             a date must fall inside a term
     no_quarantined_sources  no source may contain instructions aimed at us
 """
+
 from __future__ import annotations
 
-from dataclasses import dataclass, field as dc_field
+from collections.abc import Iterable
+from dataclasses import dataclass
+from dataclasses import field as dc_field
 from datetime import date
 from decimal import Decimal
-from typing import Any, Iterable
+from typing import Any
 
 from app.domain.config import DomainConfig, RuleSpec
 from app.domain.models import SourcedFact
@@ -66,8 +69,8 @@ class Finding:
     severity: str
     outcome: str
     entity_key: str
-    statement: str          # the rule, as the playbook states it
-    detail: str             # what was actually found, with the numbers in it
+    statement: str  # the rule, as the playbook states it
+    detail: str  # what was actually found, with the numbers in it
     citations: list[SourcedFact] = dc_field(default_factory=list)
 
     @property
@@ -110,17 +113,26 @@ class ExamineResult:
         pile nobody could check.
         """
         if self.violations:
-            return (f"{len(self.violations)} of {len(self.findings)} rules "
-                    f"violated; {len(self.unjudged)} could not be judged")
+            return (
+                f"{len(self.violations)} of {len(self.findings)} rules "
+                f"violated; {len(self.unjudged)} could not be judged"
+            )
         if self.unjudged and not self.satisfied:
-            return (f"no rule could be judged: none of the {len(self.unjudged)} "
-                    f"rules had the facts it needs")
-        return (f"no violations. {len(self.satisfied)} rules checked and "
-                f"satisfied, {len(self.unjudged)} could not be judged")
+            return (
+                f"no rule could be judged: none of the {len(self.unjudged)} "
+                f"rules had the facts it needs"
+            )
+        return (
+            f"no violations. {len(self.satisfied)} rules checked and "
+            f"satisfied, {len(self.unjudged)} could not be judged"
+        )
 
 
-def examine(cfg: DomainConfig, facts: Iterable[SourcedFact],
-            documents: Iterable[dict[str, Any]] | None = None) -> ExamineResult:
+def examine(
+    cfg: DomainConfig,
+    facts: Iterable[SourcedFact],
+    documents: Iterable[dict[str, Any]] | None = None,
+) -> ExamineResult:
     """Run every rule in the playbook over the pile, in order.
 
     Rules are evaluated per engagement, because a pile can hold more than one
@@ -135,17 +147,23 @@ def examine(cfg: DomainConfig, facts: Iterable[SourcedFact],
         rule = cfg.rules[key]
         kind = (rule.check or {}).get("kind")
         if kind is None:
-            result.findings.append(_unjudged(
-                rule, "-", f"rule {rule.key!r} declares no check, so nothing "
-                           f"evaluates it"))
+            result.findings.append(
+                _unjudged(
+                    rule, "-", f"rule {rule.key!r} declares no check, so nothing " f"evaluates it"
+                )
+            )
             continue
         evaluator = _KINDS.get(kind)
         if evaluator is None:
             # A typo in a check kind would otherwise make a rule silently stop
             # being enforced, which is worse than a rule that fails loudly.
-            result.findings.append(_unjudged(
-                rule, "-", f"unknown check kind {kind!r}; known kinds are "
-                           f"{', '.join(sorted(_KINDS))}"))
+            result.findings.append(
+                _unjudged(
+                    rule,
+                    "-",
+                    f"unknown check kind {kind!r}; known kinds are " f"{', '.join(sorted(_KINDS))}",
+                )
+            )
             continue
 
         if kind == "no_quarantined_sources":
@@ -153,21 +171,27 @@ def examine(cfg: DomainConfig, facts: Iterable[SourcedFact],
             continue
 
         if not entities:
-            result.findings.append(_unjudged(
-                rule, "-", "the pile holds no facts, so no rule can be judged"))
+            result.findings.append(
+                _unjudged(rule, "-", "the pile holds no facts, so no rule can be judged")
+            )
             continue
         for entity_key in entities:
             scoped = [f for f in facts if f.entity_key == entity_key]
-            result.findings.append(evaluator(cfg, rule, scoped, documents,
-                                             entity_key))
+            result.findings.append(evaluator(cfg, rule, scoped, documents, entity_key))
 
     return result
 
 
 # ---------------------------------------------------------------- the kinds --
 
-def _field_present(cfg: DomainConfig, rule: RuleSpec, facts: list[SourcedFact],
-                   documents: list[dict], entity_key: str) -> Finding:
+
+def _field_present(
+    cfg: DomainConfig,
+    rule: RuleSpec,
+    facts: list[SourcedFact],
+    documents: list[dict],
+    entity_key: str,
+) -> Finding:
     """The engagement must state this field somewhere."""
     name = rule.check["field"]
 
@@ -175,23 +199,31 @@ def _field_present(cfg: DomainConfig, rule: RuleSpec, facts: list[SourcedFact],
         # Not the documents' fault. No extraction schema asks for this field, so
         # the pile could not state it even if every contract did. Reporting that
         # as a violation would blame the sources for a gap in the configuration.
-        return _unjudged(rule, entity_key,
-                         f"no extraction schema declares {name!r}, so nothing in "
-                         f"the pile can answer this rule")
+        return _unjudged(
+            rule,
+            entity_key,
+            f"no extraction schema declares {name!r}, so nothing in "
+            f"the pile can answer this rule",
+        )
 
     stated = [f for f in facts if f.field == name]
     if not stated:
-        return _violation(rule, entity_key,
-                          f"no document in the engagement states {name}",
-                          _authority(cfg, facts))
+        return _violation(
+            rule, entity_key, f"no document in the engagement states {name}", _authority(cfg, facts)
+        )
     best = max(stated, key=lambda f: cfg.precedence_of(f.doc_type))
-    return _satisfied(rule, entity_key,
-                      f"{name} is stated as {best.display} in {best.document}",
-                      [best])
+    return _satisfied(
+        rule, entity_key, f"{name} is stated as {best.display} in {best.document}", [best]
+    )
 
 
-def _matches_governing(cfg: DomainConfig, rule: RuleSpec, facts: list[SourcedFact],
-                       documents: list[dict], entity_key: str) -> Finding:
+def _matches_governing(
+    cfg: DomainConfig,
+    rule: RuleSpec,
+    facts: list[SourcedFact],
+    documents: list[dict],
+    entity_key: str,
+) -> Finding:
     """Lower-authority documents must state what the governing one states.
 
     This is the shape of most playbook rules that matter commercially: an
@@ -210,9 +242,12 @@ def _matches_governing(cfg: DomainConfig, rule: RuleSpec, facts: list[SourcedFac
     must_match = set(rule.check.get("must_match") or ())
     stated = [f for f in facts if f.field == name and f.fact.normalised]
     if len(stated) < 2:
-        return _unjudged(rule, entity_key,
-                         f"{len(stated)} document(s) state {name}; at least two "
-                         f"are needed to check one against the other")
+        return _unjudged(
+            rule,
+            entity_key,
+            f"{len(stated)} document(s) state {name}; at least two "
+            f"are needed to check one against the other",
+        )
 
     top_rank = max(cfg.precedence_of(f.doc_type) for f in stated)
     governing = [f for f in stated if cfg.precedence_of(f.doc_type) == top_rank]
@@ -220,40 +255,61 @@ def _matches_governing(cfg: DomainConfig, rule: RuleSpec, facts: list[SourcedFac
         # Two documents of equal authority disagreeing is a conflict for the
         # gate, not a rule violation. Naming one of them the governing value
         # here would silently resolve exactly what must not be resolved.
-        return _unjudged(rule, entity_key,
-                         f"{len(governing)} documents of equal authority state "
-                         f"different values for {name}; which one governs is "
-                         f"unsettled and is raised as a conflict, not a finding")
+        return _unjudged(
+            rule,
+            entity_key,
+            f"{len(governing)} documents of equal authority state "
+            f"different values for {name}; which one governs is "
+            f"unsettled and is raised as a conflict, not a finding",
+        )
 
     authority = governing[0]
-    bound = [f for f in stated
-             if cfg.precedence_of(f.doc_type) < top_rank
-             and (not must_match or f.doc_type in must_match)]
+    bound = [
+        f
+        for f in stated
+        if cfg.precedence_of(f.doc_type) < top_rank and (not must_match or f.doc_type in must_match)
+    ]
     if not bound:
-        return _unjudged(rule, entity_key,
-                         f"only {authority.doc_type} documents state {name}; "
-                         f"nothing that has to follow it does, so there is "
-                         f"nothing to check")
+        return _unjudged(
+            rule,
+            entity_key,
+            f"only {authority.doc_type} documents state {name}; "
+            f"nothing that has to follow it does, so there is "
+            f"nothing to check",
+        )
 
-    offenders = [f for f in bound
-                 if not values_agree(authority.fact.normalised, f.fact.normalised,
-                                     cfg.reconciliation)]
+    offenders = [
+        f
+        for f in bound
+        if not values_agree(authority.fact.normalised, f.fact.normalised, cfg.reconciliation)
+    ]
     if not offenders:
-        return _satisfied(rule, entity_key,
-                          f"every document that must follow {name} agrees with "
-                          f"{authority.doc_type} {authority.document} "
-                          f"({authority.display})",
-                          [authority, *bound])
+        return _satisfied(
+            rule,
+            entity_key,
+            f"every document that must follow {name} agrees with "
+            f"{authority.doc_type} {authority.document} "
+            f"({authority.display})",
+            [authority, *bound],
+        )
 
     listed = ", ".join(f"{f.document} states {f.display}" for f in offenders)
-    return _violation(rule, entity_key,
-                      f"{authority.doc_type} {authority.document} governs "
-                      f"{name} at {authority.display}, but {listed}",
-                      [authority, *offenders])
+    return _violation(
+        rule,
+        entity_key,
+        f"{authority.doc_type} {authority.document} governs "
+        f"{name} at {authority.display}, but {listed}",
+        [authority, *offenders],
+    )
 
 
-def _sum_within_limit(cfg: DomainConfig, rule: RuleSpec, facts: list[SourcedFact],
-                      documents: list[dict], entity_key: str) -> Finding:
+def _sum_within_limit(
+    cfg: DomainConfig,
+    rule: RuleSpec,
+    facts: list[SourcedFact],
+    documents: list[dict],
+    entity_key: str,
+) -> Finding:
     """A total across documents must not exceed a cap stated in another."""
     sum_field, limit_field = rule.check["sum_of"], rule.check["limit"]
     parts = [f for f in facts if f.field == sum_field and _number(f) is not None]
@@ -262,59 +318,84 @@ def _sum_within_limit(cfg: DomainConfig, rule: RuleSpec, facts: list[SourcedFact
     if not parts:
         return _unjudged(rule, entity_key, f"no document states {sum_field}")
     if not limits:
-        return _unjudged(rule, entity_key,
-                         f"{len(parts)} document(s) state {sum_field} but none "
-                         f"states {limit_field}, so there is nothing to check "
-                         f"them against")
+        return _unjudged(
+            rule,
+            entity_key,
+            f"{len(parts)} document(s) state {sum_field} but none "
+            f"states {limit_field}, so there is nothing to check "
+            f"them against",
+        )
 
     cap = min(limits, key=lambda f: _number(f))  # the tightest cap binds
     total = sum(_number(f) for f in parts)
     limit = _number(cap)
     if total <= limit:
-        return _satisfied(rule, entity_key,
-                          f"{sum_field} totals {_plain(total)} across "
-                          f"{len(parts)} document(s), within the "
-                          f"{_plain(limit)} authorised by {cap.document}",
-                          [cap, *parts])
-    return _violation(rule, entity_key,
-                      f"{sum_field} totals {_plain(total)} across "
-                      f"{len(parts)} document(s), exceeding the {_plain(limit)} "
-                      f"authorised by {cap.document} by {_plain(total - limit)}",
-                      [cap, *parts])
+        return _satisfied(
+            rule,
+            entity_key,
+            f"{sum_field} totals {_plain(total)} across "
+            f"{len(parts)} document(s), within the "
+            f"{_plain(limit)} authorised by {cap.document}",
+            [cap, *parts],
+        )
+    return _violation(
+        rule,
+        entity_key,
+        f"{sum_field} totals {_plain(total)} across "
+        f"{len(parts)} document(s), exceeding the {_plain(limit)} "
+        f"authorised by {cap.document} by {_plain(total - limit)}",
+        [cap, *parts],
+    )
 
 
-def _at_least(cfg: DomainConfig, rule: RuleSpec, facts: list[SourcedFact],
-              documents: list[dict], entity_key: str) -> Finding:
+def _at_least(
+    cfg: DomainConfig,
+    rule: RuleSpec,
+    facts: list[SourcedFact],
+    documents: list[dict],
+    entity_key: str,
+) -> Finding:
     """A value must meet a minimum that another document sets."""
     name, minimum_field = rule.check["field"], rule.check["minimum"]
     values = [f for f in facts if f.field == name and _number(f) is not None]
-    minimums = [f for f in facts
-                if f.field == minimum_field and _number(f) is not None]
+    minimums = [f for f in facts if f.field == minimum_field and _number(f) is not None]
 
     if not values:
         return _unjudged(rule, entity_key, f"no document states {name}")
     if not minimums:
-        return _unjudged(rule, entity_key,
-                         f"no document states {minimum_field}, so there is no "
-                         f"minimum to hold {name} to")
+        return _unjudged(
+            rule,
+            entity_key,
+            f"no document states {minimum_field}, so there is no " f"minimum to hold {name} to",
+        )
 
     required = max(minimums, key=lambda f: cfg.precedence_of(f.doc_type))
     floor = _number(required)
     short = [f for f in values if _number(f) < floor]
     if not short:
-        return _satisfied(rule, entity_key,
-                          f"{name} meets the {_plain(floor)} required by "
-                          f"{required.document}",
-                          [required, *values])
+        return _satisfied(
+            rule,
+            entity_key,
+            f"{name} meets the {_plain(floor)} required by " f"{required.document}",
+            [required, *values],
+        )
     listed = ", ".join(f"{f.document} gives {f.display}" for f in short)
-    return _violation(rule, entity_key,
-                      f"{required.document} requires {minimum_field} of at least "
-                      f"{_plain(floor)}, but {listed}",
-                      [required, *short])
+    return _violation(
+        rule,
+        entity_key,
+        f"{required.document} requires {minimum_field} of at least "
+        f"{_plain(floor)}, but {listed}",
+        [required, *short],
+    )
 
 
-def _date_within(cfg: DomainConfig, rule: RuleSpec, facts: list[SourcedFact],
-                 documents: list[dict], entity_key: str) -> Finding:
+def _date_within(
+    cfg: DomainConfig,
+    rule: RuleSpec,
+    facts: list[SourcedFact],
+    documents: list[dict],
+    entity_key: str,
+) -> Finding:
     """A date must fall inside a term that starts somewhere and runs a length."""
     name, start_field = rule.check["value"], rule.check["start"]
     months_field = rule.check.get("plus_months")
@@ -324,41 +405,52 @@ def _date_within(cfg: DomainConfig, rule: RuleSpec, facts: list[SourcedFact],
     if not dates:
         return _unjudged(rule, entity_key, f"no document states {name}")
     if not starts:
-        return _unjudged(rule, entity_key,
-                         f"no document states {start_field}, so the term has no "
-                         f"beginning to measure from")
+        return _unjudged(
+            rule,
+            entity_key,
+            f"no document states {start_field}, so the term has no " f"beginning to measure from",
+        )
 
     start_fact = min(starts, key=lambda f: _as_date(f))
     begins = _as_date(start_fact)
     ends: date | None = None
     end_fact = start_fact
     if months_field:
-        months = [f for f in facts
-                  if f.field == months_field and _number(f) is not None]
+        months = [f for f in facts if f.field == months_field and _number(f) is not None]
         if not months:
-            return _unjudged(rule, entity_key,
-                             f"no document states {months_field}, so the term "
-                             f"has no length and no end to check against")
+            return _unjudged(
+                rule,
+                entity_key,
+                f"no document states {months_field}, so the term "
+                f"has no length and no end to check against",
+            )
         end_fact = max(months, key=lambda f: cfg.precedence_of(f.doc_type))
         ends = _add_months(begins, int(_number(end_fact)))
 
-    outside = [f for f in dates
-               if _as_date(f) < begins or (ends is not None and _as_date(f) > ends)]
+    outside = [
+        f for f in dates if _as_date(f) < begins or (ends is not None and _as_date(f) > ends)
+    ]
     window = f"{begins.isoformat()}" + (f" to {ends.isoformat()}" if ends else " onwards")
     if not outside:
-        return _satisfied(rule, entity_key,
-                          f"every {name} falls within the term ({window})",
-                          [start_fact, end_fact, *dates])
-    listed = ", ".join(f"{f.document} dated {_as_date(f).isoformat()}"
-                       for f in outside)
-    return _violation(rule, entity_key,
-                      f"the term runs {window}, but {listed}",
-                      [start_fact, end_fact, *outside])
+        return _satisfied(
+            rule,
+            entity_key,
+            f"every {name} falls within the term ({window})",
+            [start_fact, end_fact, *dates],
+        )
+    listed = ", ".join(f"{f.document} dated {_as_date(f).isoformat()}" for f in outside)
+    return _violation(
+        rule, entity_key, f"the term runs {window}, but {listed}", [start_fact, end_fact, *outside]
+    )
 
 
-def _no_quarantined_sources(cfg: DomainConfig, rule: RuleSpec,
-                            facts: list[SourcedFact], documents: list[dict],
-                            entity_key: str) -> Finding:
+def _no_quarantined_sources(
+    cfg: DomainConfig,
+    rule: RuleSpec,
+    facts: list[SourcedFact],
+    documents: list[dict],
+    entity_key: str,
+) -> Finding:
     """Text inside a document that addresses the system is reported, never
     followed.
 
@@ -369,24 +461,32 @@ def _no_quarantined_sources(cfg: DomainConfig, rule: RuleSpec,
     """
     quarantined = [d for d in documents if d.get("status") == "quarantined"]
     if not documents:
-        return _unjudged(rule, entity_key,
-                         "the pile's documents were not available to this check")
+        return _unjudged(rule, entity_key, "the pile's documents were not available to this check")
     if not quarantined:
-        return _satisfied(rule, entity_key,
-                          f"none of the {len(documents)} sources contains text "
-                          f"directing the system to act", [])
+        return _satisfied(
+            rule,
+            entity_key,
+            f"none of the {len(documents)} sources contains text " f"directing the system to act",
+            [],
+        )
     listed = "; ".join(
-        f"{d['filename']}: {(d.get('ingest_note') or 'no note')[:160]}"
-        for d in quarantined
+        f"{d['filename']}: {(d.get('ingest_note') or 'no note')[:160]}" for d in quarantined
     )
     # No fact citations, and that is correct rather than a gap: a quarantined
     # document never produced a fact, on purpose. The document itself is the
     # evidence, and the finding names it.
-    return Finding(rule_key=rule.key, severity=rule.severity, outcome=VIOLATED,
-                   entity_key=entity_key, statement=rule.statement,
-                   detail=(f"{len(quarantined)} source(s) contain text addressed "
-                           f"at the analysing system. It was quarantined and "
-                           f"never used as an input. {listed}"))
+    return Finding(
+        rule_key=rule.key,
+        severity=rule.severity,
+        outcome=VIOLATED,
+        entity_key=entity_key,
+        statement=rule.statement,
+        detail=(
+            f"{len(quarantined)} source(s) contain text addressed "
+            f"at the analysing system. It was quarantined and "
+            f"never used as an input. {listed}"
+        ),
+    )
 
 
 _KINDS = {
@@ -413,23 +513,25 @@ KNOWN_CHECKS: dict[str, tuple[str, ...]] = {
 
 # --------------------------------------------------------------- plumbing --
 
-def _violation(rule: RuleSpec, entity_key: str, detail: str,
-               citations: list[SourcedFact]) -> Finding:
+
+def _violation(
+    rule: RuleSpec, entity_key: str, detail: str, citations: list[SourcedFact]
+) -> Finding:
     citations = _dedupe(citations)
     if not citations and rule.check.get("kind") != "no_quarantined_sources":
         # There is no path that produces an uncited claim. A violation without
         # evidence is the exact thing this system is built not to emit, so it
         # fails here rather than reaching a deliverable.
-        raise AssertionError(
-            f"rule {rule.key!r} produced a violation with no citations")
-    return Finding(rule.key, rule.severity, VIOLATED, entity_key, rule.statement,
-                   detail, citations)
+        raise AssertionError(f"rule {rule.key!r} produced a violation with no citations")
+    return Finding(rule.key, rule.severity, VIOLATED, entity_key, rule.statement, detail, citations)
 
 
-def _satisfied(rule: RuleSpec, entity_key: str, detail: str,
-               citations: list[SourcedFact]) -> Finding:
-    return Finding(rule.key, rule.severity, SATISFIED, entity_key, rule.statement,
-                   detail, _dedupe(citations))
+def _satisfied(
+    rule: RuleSpec, entity_key: str, detail: str, citations: list[SourcedFact]
+) -> Finding:
+    return Finding(
+        rule.key, rule.severity, SATISFIED, entity_key, rule.statement, detail, _dedupe(citations)
+    )
 
 
 def _unjudged(rule: RuleSpec, entity_key: str, detail: str) -> Finding:
@@ -438,8 +540,7 @@ def _unjudged(rule: RuleSpec, entity_key: str, detail: str) -> Finding:
     Never carries citations, because there is nothing to cite -- that is what
     "not enough evidence" means.
     """
-    return Finding(rule.key, rule.severity, UNJUDGED, entity_key, rule.statement,
-                   detail, [])
+    return Finding(rule.key, rule.severity, UNJUDGED, entity_key, rule.statement, detail, [])
 
 
 def _dedupe(facts: list[SourcedFact]) -> list[SourcedFact]:
@@ -451,8 +552,7 @@ def _dedupe(facts: list[SourcedFact]) -> list[SourcedFact]:
 
 
 def _declared_fields(cfg: DomainConfig) -> set[str]:
-    return {name for schema in cfg.extraction.values()
-            for name in schema.get("fields", {})}
+    return {name for schema in cfg.extraction.values() for name in schema.get("fields", {})}
 
 
 def _authority(cfg: DomainConfig, facts: list[SourcedFact]) -> list[SourcedFact]:
@@ -484,8 +584,10 @@ def _add_months(start: date, months: int) -> date:
     month = month_index % 12 + 1
     # Clamp rather than overflow: a term starting on the 31st ends on the last
     # day of the month, not on the 1st of the next one.
-    day = min(start.day, [31, 29 if _leap(year) else 28, 31, 30, 31, 30,
-                          31, 31, 30, 31, 30, 31][month - 1])
+    day = min(
+        start.day,
+        [31, 29 if _leap(year) else 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1],
+    )
     return date(year, month, day)
 
 

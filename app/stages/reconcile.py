@@ -13,11 +13,13 @@ That distinction is the difference between a system that helps and one that
 quietly decides. Auto-resolving by precedence would look identical on the clean
 case and be invisibly wrong on the interesting one.
 """
+
 from __future__ import annotations
 
-from dataclasses import dataclass, field as dc_field
+from collections.abc import Iterable
+from dataclasses import dataclass
+from dataclasses import field as dc_field
 from datetime import date
-from typing import Iterable
 
 from app.domain.config import DomainConfig
 from app.domain.models import SourcedFact
@@ -94,9 +96,9 @@ def reconcile(cfg: DomainConfig, facts: Iterable[SourcedFact]) -> ReconcileResul
             continue
 
         conflict = Conflict(
-            entity_key=entity_key, field=field,
-            members=sorted(members, key=lambda m: (-cfg.precedence_of(m.doc_type),
-                                                   m.document)),
+            entity_key=entity_key,
+            field=field,
+            members=sorted(members, key=lambda m: (-cfg.precedence_of(m.doc_type), m.document)),
             time_varying=field in time_varying,
         )
         conflict.proposed, conflict.rationale = _propose(cfg, conflict, effective_dates)
@@ -114,7 +116,7 @@ def reconcile(cfg: DomainConfig, facts: Iterable[SourcedFact]) -> ReconcileResul
     return result
 
 
-def _effective_dates(cfg: DomainConfig, facts: list[SourcedFact]) -> dict[str, "date"]:
+def _effective_dates(cfg: DomainConfig, facts: list[SourcedFact]) -> dict[str, date]:
     """When each document's terms take effect, keyed by document.
 
     Used only to break a tie between documents of equal authority. Two
@@ -144,8 +146,7 @@ def _cluster(members: list[SourcedFact], cfg: DomainConfig) -> list[list[Sourced
         if member.fact.normalised is None:
             continue
         for cluster in clusters:
-            if values_agree(cluster[0].fact.normalised, member.fact.normalised,
-                            cfg.reconciliation):
+            if values_agree(cluster[0].fact.normalised, member.fact.normalised, cfg.reconciliation):
                 cluster.append(member)
                 break
         else:
@@ -153,8 +154,9 @@ def _cluster(members: list[SourcedFact], cfg: DomainConfig) -> list[list[Sourced
     return clusters
 
 
-def _propose(cfg: DomainConfig, conflict: Conflict,
-             effective_dates: dict[str, "date"] | None = None) -> tuple[SourcedFact | None, str]:
+def _propose(
+    cfg: DomainConfig, conflict: Conflict, effective_dates: dict[str, date] | None = None
+) -> tuple[SourcedFact | None, str]:
     """Suggest which member should govern, and say why.
 
     Returns no proposal when nothing in the documents separates the candidates.
@@ -162,12 +164,11 @@ def _propose(cfg: DomainConfig, conflict: Conflict,
     that the documents do not settle it.
     """
     effective_dates = effective_dates or {}
-    ranked = sorted(conflict.members, key=lambda m: cfg.precedence_of(m.doc_type),
-                    reverse=True)
+    ranked = sorted(conflict.members, key=lambda m: cfg.precedence_of(m.doc_type), reverse=True)
     top = ranked[0]
     rank = cfg.precedence_of(top.doc_type)
     tied = [m for m in ranked if cfg.precedence_of(m.doc_type) == rank]
-    dated = "" 
+    dated = ""
 
     if len({m.canonical for m in tied}) > 1:
         # Equal authority, different values. Before giving up, ask the documents
@@ -179,9 +180,11 @@ def _propose(cfg: DomainConfig, conflict: Conflict,
             leaders = [m for d, m in with_dates if d == latest]
             if len({m.canonical for m in leaders}) == 1:
                 top = leaders[0]
-                dated = (f". Two documents of equal authority disagreed; "
-                         f"{top.document} is the later, effective {latest.isoformat()}, "
-                         f"and supersedes the earlier")
+                dated = (
+                    f". Two documents of equal authority disagreed; "
+                    f"{top.document} is the later, effective {latest.isoformat()}, "
+                    f"and supersedes the earlier"
+                )
             else:
                 return None, (
                     f"{len(leaders)} documents of equal authority take effect on the "
@@ -197,12 +200,23 @@ def _propose(cfg: DomainConfig, conflict: Conflict,
                 f"must choose"
             )
 
-    others = ", ".join(sorted({f"{m.doc_type} says {m.canonical}"
-                               for m in conflict.members if m.canonical != top.canonical}))
-    rationale = (f"{top.doc_type} ({top.document}) carries the highest contractual "
-                 f"authority here and states {top.canonical}; {others}{dated}")
+    others = ", ".join(
+        sorted(
+            {
+                f"{m.doc_type} says {m.canonical}"
+                for m in conflict.members
+                if m.canonical != top.canonical
+            }
+        )
+    )
+    rationale = (
+        f"{top.doc_type} ({top.document}) carries the highest contractual "
+        f"authority here and states {top.canonical}; {others}{dated}"
+    )
     if conflict.time_varying:
-        rationale += (". This field is expected to change over time, so the "
-                      "disagreement may be historical rather than an error -- "
-                      "check the effective dates before accepting")
+        rationale += (
+            ". This field is expected to change over time, so the "
+            "disagreement may be historical rather than an error -- "
+            "check the effective dates before accepting"
+        )
     return top, rationale

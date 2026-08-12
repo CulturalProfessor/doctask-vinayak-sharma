@@ -13,6 +13,7 @@ Malformed model output retries once under a stricter instruction, then gives up
 and records the whole document as a gap. Both branches are path changes, and
 both are recorded.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -47,6 +48,7 @@ class Gap:
     could not be established" section, which is the section that makes the rest
     of it trustworthy.
     """
+
     field_name: str
     reason: str
     detail: str | None = None
@@ -69,14 +71,14 @@ class ExtractionResult:
 
     @property
     def counterparty(self) -> str | None:
-        return next((f.value_raw for f in self.facts
-                     if f.field_name == "counterparty"), None)
+        return next((f.value_raw for f in self.facts if f.field_name == "counterparty"), None)
 
     _entity_key: str | None = None
 
 
-def extract_document(provider: Provider, cfg: DomainConfig, doc_type: str, filename: str,
-                     page_text: str) -> ExtractionResult:
+def extract_document(
+    provider: Provider, cfg: DomainConfig, doc_type: str, filename: str, page_text: str
+) -> ExtractionResult:
     spec = cfg.doc_types[doc_type]
     schema = cfg.extraction[spec.extraction]
     fields: dict[str, dict] = schema.get("fields", {})
@@ -90,7 +92,9 @@ def extract_document(provider: Provider, cfg: DomainConfig, doc_type: str, filen
         try:
             completion = provider.complete(
                 purpose="extract" if attempt == 1 else "extract_retry",
-                system=system, user=user, max_tokens=3000,
+                system=system,
+                user=user,
+                max_tokens=3000,
             )
             result.usage = result.usage + completion.usage
             payload = completion.json()
@@ -103,8 +107,7 @@ def extract_document(provider: Provider, cfg: DomainConfig, doc_type: str, filen
                 # Path change: give up on this document rather than accept
                 # whatever partial text came back.
                 result.path = "skipped_unparseable"
-                result.gaps.append(Gap("*", "model output could not be parsed",
-                                       str(exc)[:300]))
+                result.gaps.append(Gap("*", "model output could not be parsed", str(exc)[:300]))
                 return result
             result.path = "retried"
             user = user + (
@@ -135,27 +138,39 @@ def extract_document(provider: Provider, cfg: DomainConfig, doc_type: str, filen
         if span is None:
             # The load-bearing discard. The value may well be right; without a
             # locatable source it cannot enter the register.
-            result.gaps.append(Gap(
-                name, "quote not found in the document",
-                f"value {value_raw!r} discarded; quote was {quote[:120]!r}",
-            ))
+            result.gaps.append(
+                Gap(
+                    name,
+                    "quote not found in the document",
+                    f"value {value_raw!r} discarded; quote was {quote[:120]!r}",
+                )
+            )
             continue
 
         value_type = spec_field.get("type", "text")
         normalised = normalise(value_type, value_raw, cfg.normalization)
         if normalised is None:
-            result.gaps.append(Gap(
-                name, f"value could not be read as {value_type}",
-                f"raw value was {value_raw!r}",
-            ))
+            result.gaps.append(
+                Gap(
+                    name,
+                    f"value could not be read as {value_type}",
+                    f"raw value was {value_raw!r}",
+                )
+            )
             continue
 
-        result.facts.append(ExtractedFact(
-            field_name=name, value_raw=value_raw, quote=quote, span=span,
-            normalised=normalised, value_type=value_type,
-            unit=spec_field.get("unit"),
-            confidence=_as_float(entry.get("confidence"), default=1.0),
-        ))
+        result.facts.append(
+            ExtractedFact(
+                field_name=name,
+                value_raw=value_raw,
+                quote=quote,
+                span=span,
+                normalised=normalised,
+                value_type=value_type,
+                unit=spec_field.get("unit"),
+                confidence=_as_float(entry.get("confidence"), default=1.0),
+            )
+        )
 
     result._entity_key = _entity_key_for(schema, result)
     return result
@@ -170,9 +185,7 @@ def _entity_key_for(schema: dict, result: ExtractionResult) -> str | None:
     template = schema.get("entity_key")
     if not template:
         return None
-    counterparty = next(
-        (f.value_raw for f in result.facts if f.field_name == "counterparty"), None
-    )
+    counterparty = next((f.value_raw for f in result.facts if f.field_name == "counterparty"), None)
     if counterparty is None:
         return None
     return template.replace("{counterparty_slug}", slugify(counterparty))

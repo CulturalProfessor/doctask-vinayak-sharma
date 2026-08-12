@@ -29,10 +29,12 @@ advisory lock (behaviour 9) needs a session-scoped connection anyway.
 `setup()` cannot run inside a transaction (it builds indexes concurrently), so
 it gets its own autocommit connection and runs with the schema migrations.
 """
+
 from __future__ import annotations
 
+from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Any, Iterator
+from typing import Any
 
 import psycopg
 from langgraph.checkpoint.postgres import PostgresSaver
@@ -67,8 +69,7 @@ def setup_checkpointer() -> None:
     Separate connection, autocommit: `CREATE INDEX CONCURRENTLY` refuses to run
     inside a transaction block, and the run's connection always has one open.
     """
-    with psycopg.connect(settings.database_url, row_factory=dict_row,
-                         autocommit=True) as conn:
+    with psycopg.connect(settings.database_url, row_factory=dict_row, autocommit=True) as conn:
         PostgresSaver(conn).setup()
 
 
@@ -79,8 +80,7 @@ def run_connection() -> Iterator[psycopg.Connection]:
     Not autocommit: the saver decides when a transaction closes, and that
     decision is the whole guarantee above.
     """
-    conn = psycopg.connect(settings.database_url, row_factory=dict_row,
-                           autocommit=False)
+    conn = psycopg.connect(settings.database_url, row_factory=dict_row, autocommit=False)
     try:
         yield conn
     finally:

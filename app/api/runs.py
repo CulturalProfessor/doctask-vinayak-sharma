@@ -16,6 +16,7 @@ register is not in memory; re-run to recompose it" -- a server telling a caller
 to redo finished work because the server forgot. The register lives in the run's
 checkpoint now, so committing is resuming.
 """
+
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
@@ -52,8 +53,9 @@ class DecideRequest(BaseModel):
 
 class AbandonRequest(BaseModel):
     abandoned_by: str = Field(description="who is ending this run; recorded on it")
-    reason: str = Field(description="why; a run that ends unexplained is a gap "
-                                    "in the record of the pile")
+    reason: str = Field(
+        description="why; a run that ends unexplained is a gap " "in the record of the pile"
+    )
 
 
 def _translate(call):
@@ -68,28 +70,28 @@ def _translate(call):
     try:
         return call()
     except ops.NotFound as exc:
-        raise HTTPException(404, str(exc))
+        raise HTTPException(404, str(exc)) from exc
     except ops.PileBusy as exc:
         # 409, not 500 and not a queue. The caller is told which run holds the
         # pile and that nothing was written, and can decide what to do.
-        raise HTTPException(409, str(exc))
+        raise HTTPException(409, str(exc)) from exc
     except ops.Finished as exc:
         # 409 and not 400. Nothing is wrong with the request; it has arrived at
         # a run whose story is over. Reported as a bad request it reads like the
         # caller made a mistake, and the caller's next move is to look for one.
-        raise HTTPException(409, str(exc))
+        raise HTTPException(409, str(exc)) from exc
     except ops.Invalid as exc:
-        raise HTTPException(409 if "pending" in str(exc) else 400, str(exc))
+        raise HTTPException(409 if "pending" in str(exc) else 400, str(exc)) from exc
     except ops.SourceUnavailable as exc:
         # 409 rather than 404 or 500. The run and the pile both exist and
         # nothing is broken; the world outside changed under a halted run, and
         # the message says which file and what to do about it. Reporting this as
         # a server error is how a recoverable situation reads as a bug.
-        raise HTTPException(409, str(exc))
+        raise HTTPException(409, str(exc)) from exc
     except ProviderUnavailable as exc:
-        raise HTTPException(503, f"model provider unavailable: {exc}")
+        raise HTTPException(503, f"model provider unavailable: {exc}") from exc
     except ProviderError as exc:
-        raise HTTPException(502, f"model provider failed: {exc}")
+        raise HTTPException(502, f"model provider failed: {exc}") from exc
 
 
 @router.post("/runs")
@@ -126,9 +128,11 @@ def decide(run_id: str, body: DecideRequest) -> dict:
 
     Mixed decisions in a single call are the normal case, not a special one.
     """
-    return _translate(lambda: ops.decide(
-        run_id, [d.model_dump() for d in body.decisions], body.decided_by,
-        decided_via="http"))
+    return _translate(
+        lambda: ops.decide(
+            run_id, [d.model_dump() for d in body.decisions], body.decided_by, decided_via="http"
+        )
+    )
 
 
 @router.post("/runs/{run_id}/commit")

@@ -10,6 +10,7 @@ Deliberately dependency-free (urllib, not httpx or the openai SDK). The whole
 model boundary is one small interface, and adding an HTTP client plus an SDK to
 cross it would be more moving parts than the crossing is worth.
 """
+
 from __future__ import annotations
 
 import json
@@ -39,24 +40,32 @@ class OpenRouterProvider(Provider):
             )
         self.model = model or settings.openrouter_model
 
-    def complete(self, *, purpose: str, system: str, user: str,
-                 max_tokens: int = 2048) -> Completion:
-        body = json.dumps({
-            "model": self.model,
-            "max_tokens": max_tokens,
-            "temperature": 0,
-            "messages": [
-                {"role": "system", "content": system},
-                {"role": "user", "content": user},
-            ],
-        }).encode()
-        request = urllib.request.Request(ENDPOINT, data=body, method="POST", headers={
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
-            # OpenRouter asks callers to identify themselves; neither header
-            # carries anything private.
-            "X-Title": "doctask",
-        })
+    def complete(
+        self, *, purpose: str, system: str, user: str, max_tokens: int = 2048
+    ) -> Completion:
+        body = json.dumps(
+            {
+                "model": self.model,
+                "max_tokens": max_tokens,
+                "temperature": 0,
+                "messages": [
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user},
+                ],
+            }
+        ).encode()
+        request = urllib.request.Request(
+            ENDPOINT,
+            data=body,
+            method="POST",
+            headers={
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+                # OpenRouter asks callers to identify themselves; neither header
+                # carries anything private.
+                "X-Title": "doctask",
+            },
+        )
 
         try:
             with urllib.request.urlopen(request, timeout=180) as response:

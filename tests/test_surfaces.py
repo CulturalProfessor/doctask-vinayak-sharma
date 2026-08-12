@@ -12,6 +12,7 @@ a pile whose seven documents had all been classified and extracted reported "0
 documents, 7 not read" while its register sat there composed from their facts.
 Nothing failed; the number was just a lie, in the place a reviewer looks first.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -59,20 +60,20 @@ def test_a_gap_is_counted_as_one(conn, pile):
 
     conn.rollback()
     document = repo.documents_for_pile(conn, pile)[0]
-    conn.execute("UPDATE document SET status = 'quarantined' WHERE id = %s",
-                 (document["id"],))
+    conn.execute("UPDATE document SET status = 'quarantined' WHERE id = %s", (document["id"],))
     conn.commit()
     try:
         row = _pile(ops.list_piles()["piles"], pile)
         assert row["documents"] == 6 and row["gaps"] == 1
 
         listed = ops.list_documents(pile)["documents"]
-        assert sum(1 for d in listed if d["is_gap"]) == 1, (
-            "a surface must not have to guess which statuses mean 'not read'"
-        )
+        assert (
+            sum(1 for d in listed if d["is_gap"]) == 1
+        ), "a surface must not have to guess which statuses mean 'not read'"
     finally:
-        conn.execute("UPDATE document SET status = %s WHERE id = %s",
-                     (document["status"], document["id"]))
+        conn.execute(
+            "UPDATE document SET status = %s WHERE id = %s", (document["status"], document["id"])
+        )
         conn.commit()
 
 
@@ -97,9 +98,9 @@ def test_a_pile_whose_bytes_were_seeded_is_still_read(conn, pile):
 
     started = ops.start_run(pile, "pile_acme")
     assert started["duplicates"], "the fixture is pointless unless they were pre-ingested"
-    assert started["facts"] > 0, (
-        "a document whose bytes happened to be stored already must still be read"
-    )
+    assert (
+        started["facts"] > 0
+    ), "a document whose bytes happened to be stored already must still be read"
     assert started["conflicts"] == 3
 
 
@@ -110,9 +111,9 @@ def test_a_document_already_read_is_not_read_twice(conn, pile):
     ops.start_run(pile, "pile_acme")
 
     again = ops.start_run(pile, "pile_acme")
-    assert again["model_calls"] == 0, (
-        "re-reading an understood pile would spend money to learn nothing"
-    )
+    assert (
+        again["model_calls"] == 0
+    ), "re-reading an understood pile would spend money to learn nothing"
     assert again["status"] == "no_change"
 
 
@@ -146,9 +147,11 @@ def test_the_pending_count_falls_as_the_review_happens(pile):
     started = ops.start_run(pile, "pile_acme")
     proposals = ops.list_proposals(started["run_id"], "pending")["proposals"]
 
-    ops.decide(started["run_id"],
-               [{"proposal_id": proposals[0]["id"], "approved": True}],
-               decided_by="vinayak")
+    ops.decide(
+        started["run_id"],
+        [{"proposal_id": proposals[0]["id"], "approved": True}],
+        decided_by="vinayak",
+    )
 
     row = ops.list_runs(pile)["runs"][0]
     assert row["pending_proposals"] == len(proposals) - 1
@@ -156,6 +159,7 @@ def test_the_pending_count_falls_as_the_review_happens(pile):
 
 
 # ------------------------------------------------------- what can be read --
+
 
 def test_the_corpora_listing_offers_what_is_actually_there():
     """`start_run` takes a folder and `arrival` takes a file path, and until
@@ -197,6 +201,7 @@ def test_a_file_that_cannot_be_read_is_listed_and_marked_rather_than_hidden():
 
 
 # ----------------------------------------------------------- sent documents --
+
 
 def test_an_uploaded_document_is_stored_and_actually_read(pile):
     """Uploading and having the document read are one intention, not two.

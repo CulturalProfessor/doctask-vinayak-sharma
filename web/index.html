@@ -17,13 +17,15 @@
          answer. -->
     <script>
       try {
-        var t = localStorage.getItem('doctask-theme')
+        var t = localStorage.getItem("doctask-theme");
         document.documentElement.setAttribute(
-          'data-theme', t === 'light' || t === 'dark' ? t : 'dark')
-        if (t === 'system') document.documentElement.removeAttribute('data-theme')
+          "data-theme",
+          t === "light" || t === "dark" ? t : "dark",
+        );
+        if (t === "system") document.documentElement.removeAttribute("data-theme");
       } catch (e) {
         // Private mode: no stored preference is readable, so take the default.
-        document.documentElement.setAttribute('data-theme', 'dark')
+        document.documentElement.setAttribute("data-theme", "dark");
       }
     </script>
   </head>

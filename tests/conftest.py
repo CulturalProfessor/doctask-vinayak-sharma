@@ -72,8 +72,9 @@ def _test_piles(db_available):
         with teardown.cursor() as cur:
             # Checkpoints are keyed by run id and have no foreign key to the
             # pile, so they are the one thing the cascade cannot reach.
-            cur.execute("SELECT id::text AS id FROM run WHERE pile_id = ANY(%s::uuid[])",
-                        (created,))
+            cur.execute(
+                "SELECT id::text AS id FROM run WHERE pile_id = ANY(%s::uuid[])", (created,)
+            )
             run_ids = [row["id"] for row in cur.fetchall()]
             for table in ("checkpoint_writes", "checkpoint_blobs", "checkpoints"):
                 cur.execute(f"DELETE FROM {table} WHERE thread_id = ANY(%s)", (run_ids,))

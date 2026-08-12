@@ -1,5 +1,6 @@
 """The live provider. Only reachable when LLM_PROVIDER=anthropic is set
 deliberately; the default everywhere else is the recorded fake."""
+
 from __future__ import annotations
 
 from app.llm.base import Completion, Provider, ProviderUnavailable, Usage
@@ -37,8 +38,9 @@ class AnthropicProvider(Provider):
             ) from exc
         self._client = Anthropic(api_key=settings.anthropic_api_key)
 
-    def complete(self, *, purpose: str, system: str, user: str,
-                 max_tokens: int = 2048) -> Completion:
+    def complete(
+        self, *, purpose: str, system: str, user: str, max_tokens: int = 2048
+    ) -> Completion:
         response = self._client.messages.create(
             model=settings.model,
             max_tokens=max_tokens,
@@ -49,8 +51,9 @@ class AnthropicProvider(Provider):
         usage = Usage(
             tokens_in=response.usage.input_tokens,
             tokens_out=response.usage.output_tokens,
-            cost_usd=_cost(settings.model, response.usage.input_tokens,
-                           response.usage.output_tokens),
+            cost_usd=_cost(
+                settings.model, response.usage.input_tokens, response.usage.output_tokens
+            ),
             model=settings.model,
         )
         completion = Completion(text=text, usage=usage)

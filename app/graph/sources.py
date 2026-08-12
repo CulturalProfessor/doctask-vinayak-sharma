@@ -29,6 +29,7 @@ refuses. The refusal is recoverable in the way the reviewer would want anyway --
 the changed file is a new document, and sending it in as an arrival is exactly
 how a change to a contract is supposed to enter this system.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -48,8 +49,7 @@ class SourceUnavailable(FileNotFoundError):
     """
 
 
-def read_source(conn: psycopg.Connection, path: Path,
-                document_id: str | None) -> bytes:
+def read_source(conn: psycopg.Connection, path: Path, document_id: str | None) -> bytes:
     """The bytes this run ingested at `path`, or a refusal that says why not.
 
     `document_id` may be None for a document that never got a row -- an
@@ -72,8 +72,7 @@ def read_source(conn: psycopg.Connection, path: Path,
     if document_id is None:
         return data
 
-    row = fetch_one(conn, "SELECT content_sha256 FROM document WHERE id = %s",
-                    (document_id,))
+    row = fetch_one(conn, "SELECT content_sha256 FROM document WHERE id = %s", (document_id,))
     if row and row["content_sha256"] != sha256_bytes(data):
         raise SourceUnavailable(
             f"{path.name} has changed on disk since this run read it. Its facts "

@@ -3,6 +3,7 @@
 These are behaviour tests, not mock tests. They put real bytes through the real
 extractor into a real database and check what came out the other side.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -60,8 +61,9 @@ def test_unsupported_format_is_recorded_as_a_gap_not_dropped(conn, pile):
     result = ingest_bytes(conn, pile, "quarterly_costs.xlsx", b"PK\x03\x04 not really")
     assert result.status == "unsupported"
     assert result.duplicate is False
-    row = fetch_one(conn, "SELECT status, ingest_note FROM document WHERE id = %s",
-                    (result.document_id,))
+    row = fetch_one(
+        conn, "SELECT status, ingest_note FROM document WHERE id = %s", (result.document_id,)
+    )
     assert row["status"] == "unsupported"
     assert "xlsx" in row["ingest_note"]
 
@@ -79,8 +81,9 @@ def test_empty_document_is_recorded_as_empty(conn, pile):
 
 def test_pages_carry_the_text_spans_will_cite(conn, pile):
     result = ingest_path(conn, pile, ACME / "sow_014.html")
-    pages = fetch_all(conn, "SELECT page_no, text FROM page WHERE document_id = %s",
-                      (result.document_id,))
+    pages = fetch_all(
+        conn, "SELECT page_no, text FROM page WHERE document_id = %s", (result.document_id,)
+    )
     assert len(pages) == 1
     assert "four hundred (400) hours" in pages[0]["text"]
 

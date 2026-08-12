@@ -5,6 +5,7 @@ Discovered by running the container without its recordings: every document
 That is the worst possible shape for a broken deployment, and the reason these
 two live in separate branches now.
 """
+
 from __future__ import annotations
 
 import pytest

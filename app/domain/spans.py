@@ -18,6 +18,7 @@ Three things make that harder than `str.index`:
   span matcher that always finds something somewhere is a fabrication engine
   with extra steps, and every citation it produces would be worthless.
 """
+
 from __future__ import annotations
 
 import re
@@ -36,8 +37,8 @@ _WORD = re.compile(r"\w+")
 class SpanMatch:
     char_start: int
     char_end: int
-    text: str          # the original text at these offsets, verbatim
-    method: str        # exact | whitespace | case_insensitive | fuzzy
+    text: str  # the original text at these offsets, verbatim
+    method: str  # exact | whitespace | case_insensitive | fuzzy
     score: float
 
 
@@ -72,8 +73,7 @@ def _to_original(index_map: list[int], text_len: int, start: int, end: int) -> t
     return char_start, char_end
 
 
-def find_span(haystack: str, needle: str,
-              min_score: float = DEFAULT_MIN_SCORE) -> SpanMatch | None:
+def find_span(haystack: str, needle: str, min_score: float = DEFAULT_MIN_SCORE) -> SpanMatch | None:
     """Locate `needle` in `haystack`, returning original offsets, or None.
 
     Returning None is a real answer. The caller records a gap rather than a
@@ -86,7 +86,7 @@ def find_span(haystack: str, needle: str,
     # 1. Exact. The cheap common case.
     at = haystack.find(needle)
     if at != -1:
-        return SpanMatch(at, at + len(needle), haystack[at:at + len(needle)], "exact", 1.0)
+        return SpanMatch(at, at + len(needle), haystack[at : at + len(needle)], "exact", 1.0)
 
     hay_norm, index_map = _normalise(haystack)
     needle_norm, _ = _normalise(needle)
@@ -115,8 +115,7 @@ def find_span(haystack: str, needle: str,
     return SpanMatch(start, end, haystack[start:end], "fuzzy", round(score, 4))
 
 
-def _best_fuzzy(hay_norm: str, needle_norm: str,
-                min_score: float) -> tuple[int, int, float] | None:
+def _best_fuzzy(hay_norm: str, needle_norm: str, min_score: float) -> tuple[int, int, float] | None:
     """Score windows anchored where the quote's first word occurs.
 
     Anchoring keeps this linear in the number of occurrences of one word rather
@@ -146,7 +145,7 @@ def _best_fuzzy(hay_norm: str, needle_norm: str,
     for start in starts:
         for factor in (0.85, 1.0, 1.15):
             length = max(1, int(target * factor))
-            window = hay_norm[start:start + length]
+            window = hay_norm[start : start + length]
             if not window:
                 continue
             matcher.set_seq1(window)
@@ -159,8 +158,9 @@ def _best_fuzzy(hay_norm: str, needle_norm: str,
     return best
 
 
-def find_all_spans(haystack: str, needles: list[str],
-                   min_score: float = DEFAULT_MIN_SCORE) -> dict[str, SpanMatch | None]:
+def find_all_spans(
+    haystack: str, needles: list[str], min_score: float = DEFAULT_MIN_SCORE
+) -> dict[str, SpanMatch | None]:
     """Locate several quotes. Unfound quotes map to None, deliberately kept in
     the result so the caller can count and report them as gaps."""
     return {needle: find_span(haystack, needle, min_score) for needle in needles}

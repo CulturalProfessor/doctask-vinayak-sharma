@@ -28,6 +28,7 @@ So the rules under test are:
      holds its pile and something is still writing.
   6. The pile itself is untouched: it can be read again immediately.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -48,6 +49,7 @@ def _stopped(pile: str) -> str:
 
 
 # --------------------------------------------------- nothing is thrown away --
+
 
 def test_an_abandoned_run_keeps_every_trace_of_what_it_did(conn, pile):
     """The whole reason this is a status and not a DELETE."""
@@ -91,7 +93,7 @@ def test_the_cost_of_an_abandoned_run_is_still_reported(conn, pile):
 
 
 def test_the_proposals_are_left_undecided_and_not_rejected(conn, pile):
-    """"Nobody decided these" and "a reviewer rejected these" are different
+    """ "Nobody decided these" and "a reviewer rejected these" are different
     facts about a pile, and only one of them is true."""
     run_id = _stopped(pile)
     pending = len(repo.list_proposals(conn, run_id, status="pending"))
@@ -118,6 +120,7 @@ def test_the_ending_is_in_the_runs_own_history(conn, pile):
 
 # ------------------------------------------------------ and nothing resumes --
 
+
 def test_an_abandoned_run_cannot_be_resumed_reviewed_or_committed(conn, pile):
     """Three doors into the same run, and all three have to be shut. The one
     that stays open is the one that quietly resurrects a run somebody
@@ -129,9 +132,11 @@ def test_an_abandoned_run_cannot_be_resumed_reviewed_or_committed(conn, pile):
     for call in (
         lambda: ops.resume(run_id),
         lambda: ops.commit(run_id),
-        lambda: ops.decide(run_id,
-                           [{"proposal_id": str(proposals[0]["id"]), "approved": True}],
-                           decided_by="vinayak"),
+        lambda: ops.decide(
+            run_id,
+            [{"proposal_id": str(proposals[0]["id"]), "approved": True}],
+            decided_by="vinayak",
+        ),
     ):
         with pytest.raises(ops.Invalid) as raised:
             call()
@@ -146,8 +151,9 @@ def test_a_committed_run_cannot_be_abandoned(conn, pile):
     produced it would describe a deliverable as work that was called off."""
     run_id = _stopped(pile)
     for proposal in repo.list_proposals(conn, run_id, status="pending"):
-        ops.decide(run_id, [{"proposal_id": str(proposal["id"]), "approved": True}],
-                   decided_by="vinayak")
+        ops.decide(
+            run_id, [{"proposal_id": str(proposal["id"]), "approved": True}], decided_by="vinayak"
+        )
     ops.commit(run_id)
 
     with pytest.raises(ops.Invalid, match="committed"):
@@ -165,14 +171,17 @@ def test_abandoning_the_same_run_twice_refuses(pile):
 
 def test_a_run_that_does_not_exist_is_not_found():
     with pytest.raises(ops.NotFound):
-        ops.abandon("00000000-0000-0000-0000-000000000000",
-                    abandoned_by="vinayak", reason="nothing there")
+        ops.abandon(
+            "00000000-0000-0000-0000-000000000000", abandoned_by="vinayak", reason="nothing there"
+        )
 
 
 # ------------------------------------------------------ who ended it, and why --
 
-@pytest.mark.parametrize("by,reason", [("", "a reason"), ("   ", "a reason"),
-                                       ("vinayak", ""), ("vinayak", "  ")])
+
+@pytest.mark.parametrize(
+    "by,reason", [("", "a reason"), ("   ", "a reason"), ("vinayak", ""), ("vinayak", "  ")]
+)
 def test_an_ending_needs_an_author_and_an_explanation(pile, by, reason):
     """The one operation whose entire justification is that history is kept
     does not get to write an anonymous, unexplained entry into it."""
@@ -183,6 +192,7 @@ def test_an_ending_needs_an_author_and_an_explanation(pile, by, reason):
 
 
 # ------------------------------------------------- a live run is untouchable --
+
 
 def test_a_run_that_is_genuinely_working_cannot_be_ended_underneath_it(pile):
     """The case that would be a disaster if it were allowed.
@@ -195,9 +205,8 @@ def test_a_run_that_is_genuinely_working_cannot_be_ended_underneath_it(pile):
     """
     run_id = _stopped(pile)
 
-    with connect() as holder, hold_pile(holder, pile):
-        with pytest.raises(ops.PileBusy):
-            ops.abandon(run_id, abandoned_by="vinayak", reason="racing the run")
+    with connect() as holder, hold_pile(holder, pile), pytest.raises(ops.PileBusy):
+        ops.abandon(run_id, abandoned_by="vinayak", reason="racing the run")
 
     # Released, and the operation works again. Otherwise this test would pass
     # for a system that had simply broken abandonment.

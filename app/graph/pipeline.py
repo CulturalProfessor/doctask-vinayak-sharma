@@ -15,16 +15,20 @@ The run owns its connection for its whole life, because the checkpointer commits
 it (see `checkpoint.py`) and because behaviour 9's per-pile lock has to be held
 by a session, not by a statement.
 """
+
 from __future__ import annotations
 
-from dataclasses import dataclass, field as dc_field
+from collections.abc import Iterable
+from dataclasses import dataclass
+from dataclasses import field as dc_field
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 import psycopg
 from langgraph.types import Command
 
 from app.domain.config import DomainConfig, load_domain
+from app.domain.models import SourcedFact
 from app.graph.build import build_graph
 from app.graph.checkpoint import DurableSaver, run_connection, thread_config
 from app.graph.locking import PileBusy, hold_pile
@@ -33,7 +37,6 @@ from app.graph.state import RunState, new_state, register_from_state
 from app.llm.base import Provider
 from app.llm.durable import DurableProvider
 from app.stages.compose import Register
-from app.domain.models import SourcedFact
 from app.stages.reconcile import Conflict, ReconcileResult, reconcile
 from app.store import repository as repo
 from app.store.engine import connect, fetch_one
@@ -58,6 +61,7 @@ class GateView:
     different process on a different day, so the gate is whatever the proposal
     table says it is.
     """
+
     run_id: str
     proposals: list[dict[str, Any]]
 
@@ -121,8 +125,10 @@ class RunResult:
         """Gaps in the shape `compose` takes them."""
         from app.stages.extract import Gap
 
-        return [(row["document"], Gap(row["field_name"], row["reason"], row["detail"]))
-                for row in self.gaps]
+        return [
+            (row["document"], Gap(row["field_name"], row["reason"], row["detail"]))
+            for row in self.gaps
+        ]
 
     @property
     def quarantined(self) -> list[dict[str, str]]:
@@ -140,8 +146,7 @@ class RunResult:
     def path(self) -> str:
         """A one-word account of what this run turned out to be."""
         if self.status == "no_change":
-            return "noop_duplicate" if self.duplicates and not self.fact_count \
-                else "noop_no_change"
+            return "noop_duplicate" if self.duplicates and not self.fact_count else "noop_no_change"
         return self.status
 
     # -- what the run cost, and which way it went --------------------------
@@ -153,8 +158,10 @@ class RunResult:
     def cost_by_stage(self) -> dict[str, dict[str, float | int]]:
         out: dict[str, dict[str, float | int]] = {}
         for event in self.stage_events:
-            row = out.setdefault(event["stage"], {"calls": 0, "ms": 0, "tokens_in": 0,
-                                                  "tokens_out": 0, "cost_usd": 0.0})
+            row = out.setdefault(
+                event["stage"],
+                {"calls": 0, "ms": 0, "tokens_in": 0, "tokens_out": 0, "cost_usd": 0.0},
+            )
             row["calls"] += 1
             row["ms"] += event["ms"] or 0
             row["tokens_in"] += event["tokens_in"]
@@ -172,9 +179,15 @@ class RunResult:
 
 # ------------------------------------------------------------------- driving --
 
-def start(provider: Provider, cfg: DomainConfig, pile_id: str,
-          sources: Iterable[Path], kind: str = "full",
-          wait_seconds: float = 2.0) -> RunResult:
+
+def start(
+    provider: Provider,
+    cfg: DomainConfig,
+    pile_id: str,
+    sources: Iterable[Path],
+    kind: str = "full",
+    wait_seconds: float = 2.0,
+) -> RunResult:
     """Understand a pile, or a document arriving into one, and halt at the gate.
 
     Raises `PileBusy` if another run holds the pile. Note the ordering: the pile
@@ -182,12 +195,12 @@ def start(provider: Provider, cfg: DomainConfig, pile_id: str,
     of a run that never happened.
     """
     paths = [str(Path(p).resolve()) for p in sorted(sources)]
-    return _drive(provider, cfg, None, pile_id, kind=kind, sources=paths,
-                  wait_seconds=wait_seconds)
+    return _drive(provider, cfg, None, pile_id, kind=kind, sources=paths, wait_seconds=wait_seconds)
 
 
-def resume(provider: Provider, cfg: DomainConfig | None = None,
-           run_id: str = "", wait_seconds: float = 2.0) -> RunResult:
+def resume(
+    provider: Provider, cfg: DomainConfig | None = None, run_id: str = "", wait_seconds: float = 2.0
+) -> RunResult:
     """Continue a run from its last committed checkpoint.
 
     Works for a run that was killed and for a run that is waiting on a reviewer;
@@ -197,16 +210,20 @@ def resume(provider: Provider, cfg: DomainConfig | None = None,
         run = repo.get_run(conn, run_id)
         if run is None:
             raise LookupError(f"no run {run_id}")
-        pile = fetch_one(conn, "SELECT domain FROM pile WHERE id = %s",
-                         (run["pile_id"],))
+        pile = fetch_one(conn, "SELECT domain FROM pile WHERE id = %s", (run["pile_id"],))
     cfg = cfg or load_domain(pile["domain"])
-    return _drive(provider, cfg, run_id, str(run["pile_id"]),
-                  wait_seconds=wait_seconds)
+    return _drive(provider, cfg, run_id, str(run["pile_id"]), wait_seconds=wait_seconds)
 
 
-def _drive(provider: Provider, cfg: DomainConfig, run_id: str | None, pile_id: str,
-           kind: str = "full", sources: list[str] | None = None,
-           wait_seconds: float = 2.0) -> RunResult:
+def _drive(
+    provider: Provider,
+    cfg: DomainConfig,
+    run_id: str | None,
+    pile_id: str,
+    kind: str = "full",
+    sources: list[str] | None = None,
+    wait_seconds: float = 2.0,
+) -> RunResult:
     """One working phase of one run, holding the pile for its duration.
 
     Starting and resuming share this because they are the same thing: take the
@@ -264,14 +281,24 @@ def _drive(provider: Provider, cfg: DomainConfig, run_id: str | None, pile_id: s
             durable.close()
 
 
-def _result(conn: psycopg.Connection, cfg: DomainConfig, run_id: str, pile_id: str,
-            state: RunState, durable: DurableProvider, interrupted: bool) -> RunResult:
+def _result(
+    conn: psycopg.Connection,
+    cfg: DomainConfig,
+    run_id: str,
+    pile_id: str,
+    state: RunState,
+    durable: DurableProvider,
+    interrupted: bool,
+) -> RunResult:
     facts = repo.load_sourced_facts(conn, cfg, pile_id)
     reconciliation = reconcile(cfg, facts)
     proposals = repo.list_proposals(conn, run_id)
 
-    proposed_keys = {(p["payload"].get("entity_key"), p["payload"].get("field"))
-                     for p in proposals if p["kind"] == "conflict"}
+    proposed_keys = {
+        (p["payload"].get("entity_key"), p["payload"].get("field"))
+        for p in proposals
+        if p["kind"] == "conflict"
+    }
     delta = state.get("delta") or {}
 
     return RunResult(
@@ -279,14 +306,15 @@ def _result(conn: psycopg.Connection, cfg: DomainConfig, run_id: str, pile_id: s
         pile_id=pile_id,
         state=state,
         register=register_from_state(state.get("register")),
-        delta=Delta(changed=list(delta.get("changed", [])),
-                    unchanged=list(delta.get("unchanged", [])),
-                    added=list(delta.get("added", []))),
+        delta=Delta(
+            changed=list(delta.get("changed", [])),
+            unchanged=list(delta.get("unchanged", [])),
+            added=list(delta.get("added", [])),
+        ),
         gate=GateView(run_id, proposals),
         facts=facts,
         reconciliation=reconciliation,
-        proposed_conflicts=[c for c in reconciliation.conflicts
-                            if c.key in proposed_keys],
+        proposed_conflicts=[c for c in reconciliation.conflicts if c.key in proposed_keys],
         model_calls=durable.issued,
         replayed_calls=durable.replayed,
         interrupted=interrupted,
@@ -299,15 +327,24 @@ def _result(conn: psycopg.Connection, cfg: DomainConfig, run_id: str, pile_id: s
 # Both call the same graph. The names survive because they are what the brief
 # calls the movements, not because the code underneath differs.
 
-def run_understand(provider: Provider, cfg: DomainConfig, pile_id: str,
-                   paths: Iterable[Path]) -> RunResult:
+
+def run_understand(
+    provider: Provider, cfg: DomainConfig, pile_id: str, paths: Iterable[Path]
+) -> RunResult:
     return start(provider, cfg, pile_id, paths, kind="full")
 
 
-def run_incremental(provider: Provider, cfg: DomainConfig, pile_id: str,
-                    path: Path) -> RunResult:
+def run_incremental(provider: Provider, cfg: DomainConfig, pile_id: str, path: Path) -> RunResult:
     return start(provider, cfg, pile_id, [path], kind="incremental")
 
 
-__all__ = ["start", "resume", "run_understand", "run_incremental",
-           "RunResult", "Delta", "GateView", "PileBusy"]
+__all__ = [
+    "Delta",
+    "GateView",
+    "PileBusy",
+    "RunResult",
+    "resume",
+    "run_incremental",
+    "run_understand",
+    "start",
+]

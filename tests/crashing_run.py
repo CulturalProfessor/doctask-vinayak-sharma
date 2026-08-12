@@ -33,6 +33,7 @@ A run refused because another process holds the pile reports that on stdout and
 exits 0. Being turned away is an outcome, not a failure, and the test has to be
 able to tell it from a crash.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -72,8 +73,8 @@ def _arm_ingest_stall(nth: int, seconds: float) -> None:
     """
     import time
 
-    from app.ingest import ingest as ingest_mod
     from app.graph import nodes as nodes_mod
+    from app.ingest import ingest as ingest_mod
 
     original = ingest_mod.ingest_path
     calls = {"n": 0}
@@ -160,30 +161,38 @@ def main() -> int:
 
     try:
         if args.resume:
-            result = pipeline.resume(FakeProvider(), cfg, run_id=args.resume,
-                                     wait_seconds=args.wait_seconds)
+            result = pipeline.resume(
+                FakeProvider(), cfg, run_id=args.resume, wait_seconds=args.wait_seconds
+            )
         else:
             directory = REPO_ROOT / "corpora" / args.corpus
             paths = sorted(p for p in directory.glob("*") if p.is_file())
-            result = pipeline.start(FakeProvider(), cfg, args.pile, paths,
-                                    wait_seconds=args.wait_seconds)
+            result = pipeline.start(
+                FakeProvider(), cfg, args.pile, paths, wait_seconds=args.wait_seconds
+            )
     except pipeline.PileBusy as exc:
         # Refused, not failed. Reported on stdout so the parent can tell the
         # difference between "another run has the pile" and a crash.
         print(json.dumps({"refused": "pile_busy", "detail": str(exc)}))
         return 0
 
-    print(json.dumps({
-        "run_id": result.run_id,
-        "status": result.status,
-        "issued": result.model_calls,
-        "replayed": result.replayed_calls,
-        "facts": result.fact_count,
-        "proposals": len(result.gate.proposals),
-        "hashes": {s.key: s.content_hash for s in (result.register.sections
-                                                   if result.register else [])},
-        "committed": result.committed,
-    }))
+    print(
+        json.dumps(
+            {
+                "run_id": result.run_id,
+                "status": result.status,
+                "issued": result.model_calls,
+                "replayed": result.replayed_calls,
+                "facts": result.fact_count,
+                "proposals": len(result.gate.proposals),
+                "hashes": {
+                    s.key: s.content_hash
+                    for s in (result.register.sections if result.register else [])
+                },
+                "committed": result.committed,
+            }
+        )
+    )
     return 0
 
 

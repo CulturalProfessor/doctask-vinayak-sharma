@@ -1,4 +1,5 @@
 """Shared shapes that cross stage boundaries."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -16,6 +17,7 @@ class SourcedFact:
     an amendment and an invoice disagreeing means something quite different from
     two invoices disagreeing.
     """
+
     document: str
     doc_type: str
     entity_key: str

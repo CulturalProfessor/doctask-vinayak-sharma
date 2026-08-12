@@ -24,6 +24,7 @@ is a graph `interrupt()` in the node after it. This module is what a reviewer --
 human, HTTP client or MCP client -- acts on: read the items, decide them one by
 one, and the run continues when it is resumed.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -41,8 +42,13 @@ class Decision:
     reason: str | None = None
 
 
-def decide(conn: psycopg.Connection, run_id: str, decisions: list[Decision],
-           decided_by: str, decided_via: str = "direct") -> dict[str, int]:
+def decide(
+    conn: psycopg.Connection,
+    run_id: str,
+    decisions: list[Decision],
+    decided_by: str,
+    decided_via: str = "direct",
+) -> dict[str, int]:
     """Apply a batch of per-item decisions in one review.
 
     A decision on an already-decided proposal is counted as `ignored` rather
@@ -51,8 +57,9 @@ def decide(conn: psycopg.Connection, run_id: str, decisions: list[Decision],
     """
     counts = {"approved": 0, "rejected": 0, "ignored": 0}
     for decision in decisions:
-        applied = repo.decide_proposal(conn, decision.proposal_id, decision.approved,
-                                       decided_by, decision.reason, decided_via)
+        applied = repo.decide_proposal(
+            conn, decision.proposal_id, decision.approved, decided_by, decision.reason, decided_via
+        )
         if not applied:
             counts["ignored"] += 1
         else:
@@ -60,8 +67,7 @@ def decide(conn: psycopg.Connection, run_id: str, decisions: list[Decision],
     return counts
 
 
-def commit(conn: psycopg.Connection, pile_id: str, run_id: str,
-           register: Register) -> dict:
+def commit(conn: psycopg.Connection, pile_id: str, run_id: str, register: Register) -> dict:
     """Write what was approved. Raises while anything is still pending.
 
     Normally reached by resuming the run rather than called directly -- the

@@ -6,6 +6,7 @@ Postgres, because the claim being tested is that pgvector actually returns the
 right rows, and a test that mocked the database would only prove the SQL string
 was constructed.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -21,6 +22,7 @@ from app.retrieval.search import (
 from app.stages.entities import resolve_entity
 
 # ---------------------------------------------------------- the embedder --
+
 
 def test_embedding_is_deterministic():
     """The same string gives the same vector, always.
@@ -55,7 +57,7 @@ def test_empty_text_refuses_rather_than_returning_zeros():
 def _similarity(a: str, b: str) -> float:
     embedder = get_embedder()
     x, y = embedder.embed(a), embedder.embed(b)
-    return sum(p * q for p, q in zip(x, y))
+    return sum(p * q for p, q in zip(x, y, strict=True))
 
 
 def test_abbreviated_name_stays_near_and_unrelated_name_stays_far():
@@ -79,6 +81,7 @@ def test_vector_literal_round_trips_dimension():
 
 # ------------------------------------------------- resolution without a db --
 
+
 def test_near_match_is_only_consulted_when_lexical_rules_fail():
     """Exact and containment still win, and the index is never asked.
 
@@ -90,17 +93,20 @@ def test_near_match_is_only_consulted_when_lexical_rules_fail():
 
     def near(name: str):
         asked.append(name)
-        return {"entity_key": "engagement:someone-else", "name": "Someone Else",
-                "similarity": 0.99}
+        return {"entity_key": "engagement:someone-else", "name": "Someone Else", "similarity": 0.99}
 
     known = ["engagement:acme-fabrication-services-llc"]
-    exact = resolve_entity("Acme Fabrication Services LLC", known,
-                           "engagement:{counterparty_slug}", near_match=near)
+    exact = resolve_entity(
+        "Acme Fabrication Services LLC", known, "engagement:{counterparty_slug}", near_match=near
+    )
     assert exact.method == "exact"
 
-    contains = resolve_entity("Brightwell Manufacturing Inc. and Acme Fabrication "
-                              "Services LLC", known,
-                              "engagement:{counterparty_slug}", near_match=near)
+    contains = resolve_entity(
+        "Brightwell Manufacturing Inc. and Acme Fabrication " "Services LLC",
+        known,
+        "engagement:{counterparty_slug}",
+        near_match=near,
+    )
     assert contains.method == "contains"
     assert asked == []
 
@@ -112,13 +118,20 @@ def test_near_match_escalates_and_never_merges():
     stated escalation without ever attaching a document to an engagement on the
     strength of a score.
     """
-    def near(name: str):
-        return {"entity_key": "engagement:acme-fabrication-services-llc",
-                "name": "Acme Fabrication Services LLC", "similarity": 0.71}
 
-    result = resolve_entity("Acme Fabrication Svcs",
-                            ["engagement:acme-fabrication-services-llc"],
-                            "engagement:{counterparty_slug}", near_match=near)
+    def near(name: str):
+        return {
+            "entity_key": "engagement:acme-fabrication-services-llc",
+            "name": "Acme Fabrication Services LLC",
+            "similarity": 0.71,
+        }
+
+    result = resolve_entity(
+        "Acme Fabrication Svcs",
+        ["engagement:acme-fabrication-services-llc"],
+        "engagement:{counterparty_slug}",
+        near_match=near,
+    )
 
     assert result.method == "near"
     assert result.escalate is True
@@ -131,15 +144,18 @@ def test_near_match_escalates_and_never_merges():
 
 def test_without_a_near_match_hook_a_new_name_is_still_a_new_engagement():
     """The step is additive. Nothing about the old paths changed."""
-    result = resolve_entity("Someone Entirely Different",
-                            ["engagement:acme-fabrication-services-llc"],
-                            "engagement:{counterparty_slug}")
+    result = resolve_entity(
+        "Someone Entirely Different",
+        ["engagement:acme-fabrication-services-llc"],
+        "engagement:{counterparty_slug}",
+    )
     assert result.method == "new"
     assert result.entity_key == "engagement:someone-entirely-different"
     assert result.confident is True
 
 
 # ------------------------------------------------------ the index, for real --
+
 
 @pytest.mark.db
 def test_entity_index_finds_an_abbreviation_in_postgres(conn, pile):
@@ -149,10 +165,10 @@ def test_entity_index_finds_an_abbreviation_in_postgres(conn, pile):
     by Postgres, and compared with `<=>`. If the cast, the dimension or the
     distance operator were wrong, the pure-Python tests above would still pass.
     """
-    remember_entity(conn, pile, "engagement:acme-fabrication-services-llc",
-                    "Acme Fabrication Services LLC")
-    remember_entity(conn, pile, "engagement:harbourline-freight-ltd",
-                    "Harbourline Freight Ltd")
+    remember_entity(
+        conn, pile, "engagement:acme-fabrication-services-llc", "Acme Fabrication Services LLC"
+    )
+    remember_entity(conn, pile, "engagement:harbourline-freight-ltd", "Harbourline Freight Ltd")
 
     hit = nearest_entity(conn, pile, "Acme Fabrication Svcs", min_similarity=0.55)
     assert hit is not None
@@ -160,8 +176,7 @@ def test_entity_index_finds_an_abbreviation_in_postgres(conn, pile):
     assert 0.55 <= hit["similarity"] <= 1.0
 
     # And the threshold is a real filter, not decoration.
-    assert nearest_entity(conn, pile, "Zeta Logistics GmbH",
-                          min_similarity=0.55) is None
+    assert nearest_entity(conn, pile, "Zeta Logistics GmbH", min_similarity=0.55) is None
 
 
 @pytest.mark.db
@@ -173,11 +188,11 @@ def test_first_name_wins_so_the_index_does_not_drift(conn, pile):
     """
     key = "engagement:acme-fabrication-services-llc"
     remember_entity(conn, pile, key, "Acme Fabrication Services LLC")
-    remember_entity(conn, pile, key, "Brightwell Manufacturing Inc. and Acme "
-                                     "Fabrication Services LLC")
+    remember_entity(
+        conn, pile, key, "Brightwell Manufacturing Inc. and Acme " "Fabrication Services LLC"
+    )
 
-    hit = nearest_entity(conn, pile, "Acme Fabrication Services LLC",
-                         min_similarity=0.5)
+    hit = nearest_entity(conn, pile, "Acme Fabrication Services LLC", min_similarity=0.5)
     assert hit["name"] == "Acme Fabrication Services LLC"
 
 
@@ -185,10 +200,18 @@ def test_first_name_wins_so_the_index_does_not_drift(conn, pile):
 def test_search_returns_provenance_and_scopes_to_the_pile(conn, pile, make_pile):
     """A hit is citable, and one pile cannot see another's documents."""
     other = make_pile()
-    _write_span(conn, pile, "msa_acme_2026.md",
-                "The hourly rate is USD 120 per hour for all engineering work.")
-    _write_span(conn, other, "msa_northwind_2026.md",
-                "The hourly rate is EUR 95 per hour for all engineering work.")
+    _write_span(
+        conn,
+        pile,
+        "msa_acme_2026.md",
+        "The hourly rate is USD 120 per hour for all engineering work.",
+    )
+    _write_span(
+        conn,
+        other,
+        "msa_northwind_2026.md",
+        "The hourly rate is EUR 95 per hour for all engineering work.",
+    )
 
     hits = search_spans(conn, pile, "hourly rate per hour", limit=5)
     assert hits, "the pile's own span should be found"
@@ -230,18 +253,22 @@ def test_unrelated_wording_is_filtered_out_rather_than_ranked(conn, pile):
     """
     _write_span(conn, pile, "notice_nonrenewal.md", "NOTICE OF NON-RENEWAL")
     _write_span(conn, pile, "amendment_01.md", "AMENDMENT NO. 2")
-    _write_span(conn, pile, "msa_acme_2026.md",
-                "Services are billed at a standard rate of USD 120 per hour.")
+    _write_span(
+        conn,
+        pile,
+        "msa_acme_2026.md",
+        "Services are billed at a standard rate of USD 120 per hour.",
+    )
 
     from app.operations import MIN_SEARCH_SIMILARITY
 
-    noise = search_spans(conn, pile, "certificate of insurance",
-                         min_similarity=MIN_SEARCH_SIMILARITY)
+    noise = search_spans(
+        conn, pile, "certificate of insurance", min_similarity=MIN_SEARCH_SIMILARITY
+    )
     assert noise == [], "an unanswerable query must return nothing, not letters in common"
 
     # And the floor is not so high that it swallows real matches.
-    real = search_spans(conn, pile, "hourly rate per hour",
-                        min_similarity=MIN_SEARCH_SIMILARITY)
+    real = search_spans(conn, pile, "hourly rate per hour", min_similarity=MIN_SEARCH_SIMILARITY)
     assert [h["document"] for h in real] == ["msa_acme_2026.md"]
 
 
@@ -275,8 +302,9 @@ def test_the_pipeline_wires_the_index_to_resolution(conn, pile):
     nodes = Nodes(conn=conn, provider=FakeProvider(), cfg=cfg)
 
     # The pile has met this party once, under this spelling.
-    remember_entity(conn, pile, "engagement:acme-fabrication-services-llc",
-                    "Acme Fabrication Services LLC")
+    remember_entity(
+        conn, pile, "engagement:acme-fabrication-services-llc", "Acme Fabrication Services LLC"
+    )
 
     # A later document spells it differently. Containment fails -- "svcs" is not
     # "services" -- so before the fourth step this fell straight through to a
@@ -320,10 +348,20 @@ def _write_span(conn, pile_id: str, filename: str, text: str) -> str:
 
     result = ingest_bytes(conn, pile_id, filename, text.encode("utf-8"))
     fact = ExtractedFact(
-        field_name="hourly_rate", value_raw="USD 120", quote=text,
-        span=SpanMatch(0, len(text), text, "exact", 1.0), normalised=None,
-        value_type="money", unit=None, confidence=0.9)
-    repo.persist_facts(conn, pile_id, None, result.document_id,
-                       [SourcedFact(document=filename, doc_type="msa",
-                                    entity_key="engagement:test", fact=fact)])
+        field_name="hourly_rate",
+        value_raw="USD 120",
+        quote=text,
+        span=SpanMatch(0, len(text), text, "exact", 1.0),
+        normalised=None,
+        value_type="money",
+        unit=None,
+        confidence=0.9,
+    )
+    repo.persist_facts(
+        conn,
+        pile_id,
+        None,
+        result.document_id,
+        [SourcedFact(document=filename, doc_type="msa", entity_key="engagement:test", fact=fact)],
+    )
     return result.document_id

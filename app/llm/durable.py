@@ -28,6 +28,7 @@ fresh run over the same documents genuinely re-asks. Resumption is a promise
 about one run, and pretending a new run is free would be a different claim
 entirely.
 """
+
 from __future__ import annotations
 
 import psycopg
@@ -45,8 +46,9 @@ class DurableProvider:
     calls as one uninterrupted run.
     """
 
-    def __init__(self, inner: Provider, run_id: str,
-                 conn: psycopg.Connection | None = None) -> None:
+    def __init__(
+        self, inner: Provider, run_id: str, conn: psycopg.Connection | None = None
+    ) -> None:
         self.inner = inner
         self.name = f"durable({getattr(inner, 'name', 'provider')})"
         self.run_id = run_id
@@ -63,7 +65,7 @@ class DurableProvider:
         if self._own_conn and not self._conn.closed:
             self._conn.close()
 
-    def __enter__(self) -> "DurableProvider":
+    def __enter__(self) -> DurableProvider:
         return self
 
     def __exit__(self, *exc) -> None:
@@ -71,8 +73,9 @@ class DurableProvider:
 
     # -- the boundary ------------------------------------------------------
 
-    def complete(self, *, purpose: str, system: str, user: str,
-                 max_tokens: int = 2048) -> Completion:
+    def complete(
+        self, *, purpose: str, system: str, user: str, max_tokens: int = 2048
+    ) -> Completion:
         key = call_key(purpose, system, user)
 
         recorded = self._recall(key)
@@ -91,10 +94,13 @@ class DurableProvider:
 
     def _recall(self, key: str) -> Completion | None:
         with self._conn.cursor() as cur:
-            cur.execute("""
+            cur.execute(
+                """
                 SELECT response, tokens_in, tokens_out, cost_usd, model
                 FROM model_call WHERE run_id = %s AND call_key = %s
-            """, (self.run_id, key))
+            """,
+                (self.run_id, key),
+            )
             row = cur.fetchone()
         if row is None:
             return None
@@ -104,17 +110,32 @@ class DurableProvider:
         # with the node that wrote it.
         return Completion(
             text=row["response"],
-            usage=Usage(row["tokens_in"], row["tokens_out"],
-                        float(row["cost_usd"]), row["model"] or "recorded"),
+            usage=Usage(
+                row["tokens_in"],
+                row["tokens_out"],
+                float(row["cost_usd"]),
+                row["model"] or "recorded",
+            ),
         )
 
     def _record(self, purpose: str, key: str, completion: Completion) -> None:
         usage = completion.usage
         with self._conn.cursor() as cur:
-            cur.execute("""
+            cur.execute(
+                """
                 INSERT INTO model_call (run_id, purpose, call_key, response,
                                         tokens_in, tokens_out, cost_usd, model)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (run_id, call_key) DO NOTHING
-            """, (self.run_id, purpose, key, completion.text, usage.tokens_in,
-                  usage.tokens_out, usage.cost_usd, usage.model))
+            """,
+                (
+                    self.run_id,
+                    purpose,
+                    key,
+                    completion.text,
+                    usage.tokens_in,
+                    usage.tokens_out,
+                    usage.cost_usd,
+                    usage.model,
+                ),
+            )

@@ -8,6 +8,7 @@ broken. The dispatch itself is `ops.arrival`, which the incremental tests
 already cover end to end; here it is injected, so these tests prove the trigger
 rather than re-proving the pipeline.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -41,11 +42,11 @@ class Recorder:
         self.calls.append((pile_id, document))
         if self.raises is not None:
             raise self.raises
-        return {"run_id": None, "status": "awaiting_approval",
-                "note": "1 document read"}
+        return {"run_id": None, "status": "awaiting_approval", "note": "1 document read"}
 
 
 # ------------------------------------------------------------- settling --
+
 
 def test_a_file_still_being_written_is_not_dispatched(inbox):
     """The reason this polls instead of listening for events.
@@ -91,6 +92,7 @@ def test_a_watch_dir_outside_corpora_is_refused_at_startup(tmp_path):
 
 # ------------------------------------------------------- dispatching, live --
 
+
 @pytest.mark.db
 def test_a_settled_file_dispatches_exactly_once(inbox, pile, conn):
     """Settling is not an event -- a finished file is settled on every scan
@@ -101,8 +103,8 @@ def test_a_settled_file_dispatches_exactly_once(inbox, pile, conn):
     watcher = Watcher(inbox, "watch-test-once", dispatch=recorder)
     (inbox / "amendment.md").write_text("# Amendment 3\nThe rate becomes USD 140.\n")
 
-    watcher.settled_files()          # first sight
-    outcomes = watcher.tick()        # settled, dispatched
+    watcher.settled_files()  # first sight
+    outcomes = watcher.tick()  # settled, dispatched
 
     assert [o.outcome for o in outcomes] == ["dispatched"]
     assert len(recorder.calls) == 1
@@ -186,8 +188,7 @@ def test_a_crashing_dispatch_does_not_stop_the_watcher(inbox, pile, conn):
     """A watcher that dies on one bad file stops watching, and every document
     after it is lost with no error anywhere."""
     _name_pile(conn, pile, "watch-test-crash")
-    watcher = Watcher(inbox, "watch-test-crash",
-                      dispatch=Recorder(raises=RuntimeError("boom")))
+    watcher = Watcher(inbox, "watch-test-crash", dispatch=Recorder(raises=RuntimeError("boom")))
     (inbox / "one.md").write_text("first\n")
     (inbox / "two.md").write_text("second\n")
 

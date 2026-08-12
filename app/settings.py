@@ -1,5 +1,6 @@
 """Process configuration. Values come from the environment; `.env` is read as a
 convenience for local runs and never committed."""
+
 from __future__ import annotations
 
 import os

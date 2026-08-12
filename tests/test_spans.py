@@ -4,6 +4,7 @@ The property that matters most is the negative one: a quote that is not in the
 document must return nothing. A matcher that always finds something somewhere
 would make every citation in the system worthless while looking like it worked.
 """
+
 from __future__ import annotations
 
 from app.domain.spans import find_all_spans, find_span
@@ -17,7 +18,7 @@ MSA_TEXT = extract_pages(MSA, "md")[0].text
 def test_exact_match_reports_exact_offsets():
     match = find_span(MSA_TEXT, "USD 250,000")
     assert match is not None and match.method == "exact"
-    assert MSA_TEXT[match.char_start:match.char_end] == "USD 250,000"
+    assert MSA_TEXT[match.char_start : match.char_end] == "USD 250,000"
 
 
 def test_finds_a_quote_that_wraps_across_a_line_break():
@@ -28,18 +29,22 @@ def test_finds_a_quote_that_wraps_across_a_line_break():
     assert match is not None
     assert match.method == "whitespace"
     # The offsets must point at the original text, newline and all.
-    assert MSA_TEXT[match.char_start:match.char_end] == "USD 120 per\nhour"
+    assert MSA_TEXT[match.char_start : match.char_end] == "USD 120 per\nhour"
 
 
 def test_offsets_always_index_the_original_text():
     """Whatever strategy matched, slicing the source by the reported offsets has
     to reproduce the reported text. Otherwise a reviewer shown the citation sees
     something other than what was cited."""
-    for quote in ["USD 120 per hour", "sixty (60) days prior written notice",
-                  "twelve (12) months", "State of Delaware"]:
+    for quote in [
+        "USD 120 per hour",
+        "sixty (60) days prior written notice",
+        "twelve (12) months",
+        "State of Delaware",
+    ]:
         match = find_span(MSA_TEXT, quote)
         assert match is not None, quote
-        assert MSA_TEXT[match.char_start:match.char_end] == match.text
+        assert MSA_TEXT[match.char_start : match.char_end] == match.text
 
 
 def test_tolerates_case_and_punctuation_drift():
@@ -79,8 +84,9 @@ def test_paraphrased_whitespace_and_wording_still_matches():
 def test_a_near_miss_below_threshold_is_rejected():
     """Same shape, different number. Accepting this would cite the wrong clause
     for a value -- the most damaging possible failure here."""
-    match = find_span(MSA_TEXT, "Invoices are payable within ninety (90) days of receipt",
-                      min_score=0.95)
+    match = find_span(
+        MSA_TEXT, "Invoices are payable within ninety (90) days of receipt", min_score=0.95
+    )
     assert match is None
 
 

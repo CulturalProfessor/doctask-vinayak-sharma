@@ -9,6 +9,7 @@ material to *describe*, never as something to obey. This is the model-facing
 half of graded behaviour 8; `screen.py` is the half that does not depend on the
 model behaving.
 """
+
 from __future__ import annotations
 
 import json
@@ -43,8 +44,8 @@ def _wrap(text: str, limit: int = 24_000) -> str:
 
 def classify_prompt(doc_types: dict[str, Any], filename: str, text: str) -> tuple[str, str]:
     taxonomy = "\n".join(
-        f"  {key}: {spec.label}" + (f" -- often contains: {'; '.join(spec.hints)}"
-                                    if spec.hints else "")
+        f"  {key}: {spec.label}"
+        + (f" -- often contains: {'; '.join(spec.hints)}" if spec.hints else "")
         for key, spec in doc_types.items()
     )
     system = f"""You classify documents in a vendor-contracting pile.
@@ -74,8 +75,9 @@ to direct an automated reader."""
     return system, user
 
 
-def extract_prompt(schema: dict[str, Any], doc_type: str, filename: str,
-                   text: str) -> tuple[str, str]:
+def extract_prompt(
+    schema: dict[str, Any], doc_type: str, filename: str, text: str
+) -> tuple[str, str]:
     fields = schema.get("fields", {})
     lines = []
     for name, spec in fields.items():

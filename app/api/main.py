@@ -4,6 +4,7 @@ Runs and the gate live in `runs.py`. Both files are thin over
 `app.operations`, which is what keeps this API, the MCP server and the review UI
 able to do exactly the same things (graded behaviour 4).
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -15,7 +16,8 @@ from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from app import operations as ops
-from app.api.runs import _translate, router as runs_router
+from app.api.runs import _translate
+from app.api.runs import router as runs_router
 from app.settings import REPO_ROOT, settings
 from app.store.engine import fetch_one, transaction
 
@@ -74,8 +76,8 @@ async def lifespan(_app: FastAPI):
             log.error("watch: not started -- %s", exc)
         else:
             task = asyncio.create_task(
-                watch_module.run_forever(watcher, settings.watch_interval_seconds,
-                                         stop))
+                watch_module.run_forever(watcher, settings.watch_interval_seconds, stop)
+            )
     try:
         yield
     finally:
@@ -102,7 +104,7 @@ def health() -> dict:
             fetch_one(conn, "SELECT 1 AS ok")
         return {"status": "healthy", "database": "reachable"}
     except Exception as exc:
-        raise HTTPException(503, {"status": "degraded", "database": str(exc)[:200]})
+        raise HTTPException(503, {"status": "degraded", "database": str(exc)[:200]}) from exc
 
 
 @app.get("/piles")

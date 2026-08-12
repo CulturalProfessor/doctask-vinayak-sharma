@@ -460,6 +460,33 @@ are not evidence of anything.
 
 **English only, and no localisation.** Cut-list item 4 was never reached.
 
+## Lint and format
+
+```bash
+.venv/bin/ruff check .
+.venv/bin/black --check .
+```
+
+`ruff` catches unused imports, unreachable code and the like; `black` is the
+formatter, so `ruff`'s own formatting rules stay off (`E501` included — line
+length is `black`'s call, not a lint failure). Both are check-only here and
+leave files untouched; apply what they'd change with:
+
+```bash
+.venv/bin/ruff check --fix .
+.venv/bin/black .
+```
+
+`web/` has the same split, ESLint for lint and Prettier for format:
+
+```bash
+cd web
+npm run lint      # eslint .
+npm run format    # prettier --check .
+npm run lint:fix
+npm run format:fix
+```
+
 ## Tests
 
 ```bash

@@ -21,6 +21,7 @@ that writes nothing.
 **Facts live in the database, not in the state.** Nodes that need the pile's
 facts load them. See `app/graph/state.py` for the reasoning.
 """
+
 from __future__ import annotations
 
 import time
@@ -42,14 +43,14 @@ from app.retrieval import search as retrieval
 from app.stages.classify import classify_document
 from app.stages.compose import Register, compose
 from app.stages.entities import DEFAULT_NEAR_MATCH_SIMILARITY, resolve_entity
-from app.stages.extract import Gap, extract_document
 from app.stages.examine import Finding, examine
+from app.stages.extract import Gap, extract_document
 from app.stages.reconcile import Conflict, ReconcileResult, reconcile
 from app.store import repository as repo
 
 
 class _Timer:
-    def __enter__(self) -> "_Timer":
+    def __enter__(self) -> _Timer:
         self.start = time.perf_counter()
         return self
 
@@ -97,11 +98,12 @@ class Nodes:
             path = Path(source)
             result = ingest_path(self.conn, pile_id, path)
             repo.record_stage_event(
-                self.conn, run_id, "ingest",
+                self.conn,
+                run_id,
+                "ingest",
                 "duplicate" if result.duplicate else result.status,
                 document_id=result.document_id,
-                detail={"filename": result.filename, "format": result.format,
-                        "note": result.note},
+                detail={"filename": result.filename, "format": result.format, "note": result.note},
             )
             if result.document_id:
                 documents[result.filename] = result.document_id
@@ -117,8 +119,7 @@ class Nodes:
             if result.status == "ingested":
                 queue.append(source)
 
-        return {"documents": documents, "duplicates": duplicates, "queue": queue,
-                "current": None}
+        return {"documents": documents, "duplicates": duplicates, "queue": queue, "current": None}
 
     # -------------------------------------------------- the document loop --
 
@@ -142,11 +143,17 @@ class Nodes:
             result = classify_document(self.provider, self.cfg, path.name, text)
 
         repo.record_stage_event(
-            self.conn, state["run_id"], "classify", result.path,
+            self.conn,
+            state["run_id"],
+            "classify",
+            result.path,
             document_id=document_id,
-            ms=timer.ms, tokens_in=result.usage.tokens_in,
-            tokens_out=result.usage.tokens_out, cost_usd=result.usage.cost_usd,
-            model=result.usage.model, detail={"note": result.note},
+            ms=timer.ms,
+            tokens_in=result.usage.tokens_in,
+            tokens_out=result.usage.tokens_out,
+            cost_usd=result.usage.cost_usd,
+            model=result.usage.model,
+            detail={"note": result.note},
         )
 
         if result.quarantine:
@@ -154,22 +161,28 @@ class Nodes:
             # becomes something to report on, never something to act on.
             if document_id:
                 repo.execute_quarantine(self.conn, document_id, result.note or "")
-            return {"quarantined": [*state.get("quarantined", []),
-                                    {"document": path.name, "note": result.note or ""}]}
+            return {
+                "quarantined": [
+                    *state.get("quarantined", []),
+                    {"document": path.name, "note": result.note or ""},
+                ]
+            }
 
         if result.escalate:
             if document_id:
-                repo.set_document_type(self.conn, document_id, result.doc_type,
-                                       result.confidence, status="escalated")
-            return {"escalated": [*state.get("escalated", []),
-                                  {"document": path.name, "stage": "classify",
-                                   "note": result.note or ""}]}
+                repo.set_document_type(
+                    self.conn, document_id, result.doc_type, result.confidence, status="escalated"
+                )
+            return {
+                "escalated": [
+                    *state.get("escalated", []),
+                    {"document": path.name, "stage": "classify", "note": result.note or ""},
+                ]
+            }
 
         if document_id:
-            repo.set_document_type(self.conn, document_id, result.doc_type,
-                                   result.confidence)
-        return {"doc_types": {**state.get("doc_types", {}),
-                              path.name: result.doc_type}}
+            repo.set_document_type(self.conn, document_id, result.doc_type, result.confidence)
+        return {"doc_types": {**state.get("doc_types", {}), path.name: result.doc_type}}
 
     def extract(self, state: RunState) -> RunState:
         """Facts out of one document, each bound to the span it came from.
@@ -187,19 +200,26 @@ class Nodes:
         text = self._page_text(path, document_id)
 
         with _Timer() as timer:
-            extraction = extract_document(self.provider, self.cfg, doc_type,
-                                          path.name, text)
+            extraction = extract_document(self.provider, self.cfg, doc_type, path.name, text)
         repo.record_stage_event(
-            self.conn, run_id, "extract", extraction.path, document_id=document_id,
-            ms=timer.ms, tokens_in=extraction.usage.tokens_in,
-            tokens_out=extraction.usage.tokens_out, cost_usd=extraction.usage.cost_usd,
+            self.conn,
+            run_id,
+            "extract",
+            extraction.path,
+            document_id=document_id,
+            ms=timer.ms,
+            tokens_in=extraction.usage.tokens_in,
+            tokens_out=extraction.usage.tokens_out,
+            cost_usd=extraction.usage.cost_usd,
             model=extraction.usage.model,
-            detail={"facts": len(extraction.facts), "gaps": len(extraction.gaps),
-                    "attempts": extraction.attempts},
+            detail={
+                "facts": len(extraction.facts),
+                "gaps": len(extraction.gaps),
+                "attempts": extraction.attempts,
+            },
         )
 
-        gaps = [*state.get("gaps", []), *(self._gap_row(path.name, g)
-                                          for g in extraction.gaps)]
+        gaps = [*state.get("gaps", []), *(self._gap_row(path.name, g) for g in extraction.gaps)]
 
         # Identity is settled against the engagements the pile already knows,
         # never taken from the model's phrasing. This used to live only in the
@@ -208,45 +228,65 @@ class Nodes:
         known = repo.known_entity_keys(self.conn, pile_id)
         schema = self.cfg.extraction[self.cfg.doc_types[doc_type].extraction]
         resolution = resolve_entity(
-            extraction.counterparty or "", known,
+            extraction.counterparty or "",
+            known,
             schema.get("entity_key", "engagement:{counterparty_slug}"),
             self.cfg.reconciliation.get("entity"),
             near_match=self._near_entity(pile_id),
         )
         repo.record_stage_event(
-            self.conn, run_id, "resolve_entity", resolution.method,
+            self.conn,
+            run_id,
+            "resolve_entity",
+            resolution.method,
             document_id=document_id,
-            detail={"entity_key": resolution.entity_key, "note": resolution.note,
-                    "similarity": resolution.similarity},
+            detail={
+                "entity_key": resolution.entity_key,
+                "note": resolution.note,
+                "similarity": resolution.similarity,
+            },
         )
 
         if resolution.escalate:
             # Merging two engagements corrupts the register; splitting one hides
             # every conflict. Neither is ours to choose silently.
             if document_id:
-                repo.set_document_type(self.conn, document_id, doc_type,
-                                       1.0, status="escalated")
-            return {"gaps": gaps,
-                    "escalated": [*state.get("escalated", []),
-                                  {"document": path.name, "stage": "resolve_entity",
-                                   "note": resolution.note or ""}]}
+                repo.set_document_type(self.conn, document_id, doc_type, 1.0, status="escalated")
+            return {
+                "gaps": gaps,
+                "escalated": [
+                    *state.get("escalated", []),
+                    {
+                        "document": path.name,
+                        "stage": "resolve_entity",
+                        "note": resolution.note or "",
+                    },
+                ],
+            }
 
         if resolution.entity_key is None or not extraction.facts:
             if extraction.facts:
                 # Without a key these facts can never join a group, so they
                 # could never be compared with anything. An explicit gap, not a
                 # silent drop.
-                gaps.append({"document": path.name, "field_name": "*",
-                             "reason": "no entity key could be built",
-                             "detail": f"{len(extraction.facts)} facts could not be "
-                                       f"attributed to an engagement and are "
-                                       f"excluded from the register"})
-            return {"gaps": gaps,
-                    "fact_counts": {**state.get("fact_counts", {}), path.name: 0}}
+                gaps.append(
+                    {
+                        "document": path.name,
+                        "field_name": "*",
+                        "reason": "no entity key could be built",
+                        "detail": f"{len(extraction.facts)} facts could not be "
+                        f"attributed to an engagement and are "
+                        f"excluded from the register",
+                    }
+                )
+            return {"gaps": gaps, "fact_counts": {**state.get("fact_counts", {}), path.name: 0}}
 
-        sourced = [SourcedFact(document=path.name, doc_type=doc_type,
-                               entity_key=resolution.entity_key, fact=fact)
-                   for fact in extraction.facts]
+        sourced = [
+            SourcedFact(
+                document=path.name, doc_type=doc_type, entity_key=resolution.entity_key, fact=fact
+            )
+            for fact in extraction.facts
+        ]
         repo.persist_facts(self.conn, pile_id, run_id, document_id, sourced)
 
         # Index the name this engagement was first known by, so the *next*
@@ -256,13 +296,13 @@ class Nodes:
         # to it -- indexing a name for a key that carries no facts would leave
         # the pile escalating documents against a party it never recorded.
         if extraction.counterparty:
-            retrieval.remember_entity(self.conn, pile_id, resolution.entity_key,
-                                      extraction.counterparty)
+            retrieval.remember_entity(
+                self.conn, pile_id, resolution.entity_key, extraction.counterparty
+            )
 
         return {
             "gaps": gaps,
-            "entity_keys": {**state.get("entity_keys", {}),
-                            path.name: resolution.entity_key},
+            "entity_keys": {**state.get("entity_keys", {}), path.name: resolution.entity_key},
             "fact_counts": {**state.get("fact_counts", {}), path.name: len(sourced)},
         }
 
@@ -278,12 +318,18 @@ class Nodes:
         with _Timer() as timer:
             _, result = self._facts_and_conflicts(state)
         repo.record_stage_event(
-            self.conn, state["run_id"], "reconcile", result.path, ms=timer.ms,
+            self.conn,
+            state["run_id"],
+            "reconcile",
+            result.path,
+            ms=timer.ms,
             detail={"conflicts": len(result.conflicts), "note": result.note},
         )
-        return {"conflict_count": len(result.conflicts),
-                "reconcile_path": result.path,
-                "note": result.note if result.escalate else state.get("note")}
+        return {
+            "conflict_count": len(result.conflicts),
+            "reconcile_path": result.path,
+            "note": result.note if result.escalate else state.get("note"),
+        }
 
     def escalate_volume(self, state: RunState) -> RunState:
         """Past a certain number of conflicts, the run is what needs attention.
@@ -294,13 +340,20 @@ class Nodes:
         reviewer needs to see the register to judge the escalation.
         """
         repo.create_proposal(
-            self.conn, state["pile_id"], state["run_id"], kind="escalation",
-            summary=(f"this run found {state['conflict_count']} conflicts, above the "
-                     f"configured ceiling; review the pile as a whole before "
-                     f"deciding item by item"),
-            payload={"conflicts": state["conflict_count"],
-                     "ceiling": self.cfg.reconciliation.get("escalate_above"),
-                     "note": state.get("note")},
+            self.conn,
+            state["pile_id"],
+            state["run_id"],
+            kind="escalation",
+            summary=(
+                f"this run found {state['conflict_count']} conflicts, above the "
+                f"configured ceiling; review the pile as a whole before "
+                f"deciding item by item"
+            ),
+            payload={
+                "conflicts": state["conflict_count"],
+                "ceiling": self.cfg.reconciliation.get("escalate_above"),
+                "note": state.get("note"),
+            },
         )
         return {"status": "escalated"}
 
@@ -309,7 +362,11 @@ class Nodes:
         with _Timer() as timer:
             register = compose(self.cfg, facts, result.conflicts, self._gaps(state))
         repo.record_stage_event(
-            self.conn, state["run_id"], "compose", "composed", ms=timer.ms,
+            self.conn,
+            state["run_id"],
+            "compose",
+            "composed",
+            ms=timer.ms,
             detail={"sections": len(register.sections)},
         )
         return {"register": register_to_state(register)}
@@ -335,15 +392,23 @@ class Nodes:
         repo.persist_findings(self.conn, pile_id, run_id, result.findings)
 
         repo.record_stage_event(
-            self.conn, run_id, "examine", result.path, ms=timer.ms,
-            detail={"rules": len(result.findings),
-                    "violated": len(result.violations),
-                    "satisfied": len(result.satisfied),
-                    "not_enough_evidence": len(result.unjudged),
-                    "summary": result.summary()},
+            self.conn,
+            run_id,
+            "examine",
+            result.path,
+            ms=timer.ms,
+            detail={
+                "rules": len(result.findings),
+                "violated": len(result.violations),
+                "satisfied": len(result.satisfied),
+                "not_enough_evidence": len(result.unjudged),
+                "summary": result.summary(),
+            },
         )
-        return {"findings": [_finding_row(f) for f in result.findings],
-                "examine_summary": result.summary()}
+        return {
+            "findings": [_finding_row(f) for f in result.findings],
+            "examine_summary": result.summary(),
+        }
 
     def delta(self, state: RunState) -> RunState:
         """What this run actually changed, against the committed version.
@@ -353,8 +418,10 @@ class Nodes:
         skipped because we predicted it would not move is only an assumption.
         """
         register = register_from_state(state["register"])
-        previous = {row["section_key"]: row["content_hash"]
-                    for row in repo.sections_for_version(self.conn, state["pile_id"])}
+        previous = {
+            row["section_key"]: row["content_hash"]
+            for row in repo.sections_for_version(self.conn, state["pile_id"])
+        }
 
         changed, unchanged, added = [], [], []
         for section in register.sections:
@@ -367,8 +434,11 @@ class Nodes:
 
         delta = {"changed": changed, "unchanged": unchanged, "added": added}
         repo.record_stage_event(
-            self.conn, state["run_id"], "delta",
-            "noop" if not changed and not added else "patched", detail=delta,
+            self.conn,
+            state["run_id"],
+            "delta",
+            "noop" if not changed and not added else "patched",
+            detail=delta,
         )
         return {"delta": delta}
 
@@ -398,7 +468,10 @@ class Nodes:
             if self._already_reviewed(seen.get(conflict.key, []), conflict):
                 continue
             repo.create_proposal(
-                self.conn, pile_id, run_id, kind="conflict",
+                self.conn,
+                pile_id,
+                run_id,
+                kind="conflict",
                 ref_id=conflict_ids.get(conflict.key),
                 summary=self._conflict_summary(conflict),
                 payload=self._conflict_payload(conflict),
@@ -414,11 +487,16 @@ class Nodes:
             if row["outcome"] != "violated":
                 continue
             key = f"{row['rule_key']}|{row['entity_key']}"
-            if any(prior["status"] == "pending" or prior["detail"] == row["detail"]
-                   for prior in seen_findings.get(key, [])):
+            if any(
+                prior["status"] == "pending" or prior["detail"] == row["detail"]
+                for prior in seen_findings.get(key, [])
+            ):
                 continue
             repo.create_proposal(
-                self.conn, pile_id, run_id, kind="finding",
+                self.conn,
+                pile_id,
+                run_id,
+                kind="finding",
                 ref_id=finding_ids.get((row["rule_key"], row["entity_key"])),
                 summary=f"{row['rule_key']} ({row['severity']}): {row['detail']}",
                 payload=row,
@@ -435,13 +513,21 @@ class Nodes:
                 # while another is still at the gate turns one review into two.
                 continue
             repo.create_proposal(
-                self.conn, pile_id, run_id, kind="section_patch",
-                summary=(f"{key}: {'new section' if key in delta['added'] else 'updated'}"
-                         f" — {len(section.citations)} citations, "
-                         f"{section.gap_count} gaps"),
-                payload={"section_key": key, "content_hash": section.content_hash,
-                         "cause_document_id": self._cause_document_id(state),
-                         "body": section.body},
+                self.conn,
+                pile_id,
+                run_id,
+                kind="section_patch",
+                summary=(
+                    f"{key}: {'new section' if key in delta['added'] else 'updated'}"
+                    f" — {len(section.citations)} citations, "
+                    f"{section.gap_count} gaps"
+                ),
+                payload={
+                    "section_key": key,
+                    "content_hash": section.content_hash,
+                    "cause_document_id": self._cause_document_id(state),
+                    "body": section.body,
+                },
             )
 
         pending = repo.list_proposals(self.conn, run_id, status="pending")
@@ -449,18 +535,22 @@ class Nodes:
             # Nothing moved, so there is nothing for a person to decide. Opening
             # a gate over an empty list would train a reviewer to click through
             # it, which is how a gate stops being one.
-            note = ("identical bytes already ingested; nothing to update"
-                    if state.get("duplicates") and not state.get("fact_counts")
-                    else "the documents were read and their facts stored, but no "
-                         "section of the register changed")
+            note = (
+                "identical bytes already ingested; nothing to update"
+                if state.get("duplicates") and not state.get("fact_counts")
+                else "the documents were read and their facts stored, but no "
+                "section of the register changed"
+            )
             repo.set_run_status(self.conn, run_id, "no_change")
-            repo.record_stage_event(self.conn, run_id, "gate", "nothing_to_review",
-                                    detail={"note": note})
+            repo.record_stage_event(
+                self.conn, run_id, "gate", "nothing_to_review", detail={"note": note}
+            )
             return {"proposal_count": 0, "status": "no_change", "note": note}
 
         repo.set_run_status(self.conn, run_id, "awaiting_approval")
-        repo.record_stage_event(self.conn, run_id, "gate", "opened",
-                                detail={"proposals": len(pending)})
+        repo.record_stage_event(
+            self.conn, run_id, "gate", "opened", detail={"proposals": len(pending)}
+        )
         return {"proposal_count": len(pending), "status": "awaiting_approval"}
 
     def gate(self, state: RunState) -> RunState:
@@ -471,12 +561,14 @@ class Nodes:
         wrote would be written twice. The proposals are created in `propose`,
         which runs once and stays run.
         """
-        interrupt({
-            "run_id": state["run_id"],
-            "awaiting": "human review",
-            "proposals": state.get("proposal_count", 0),
-            "conflicts": state.get("conflict_count", 0),
-        })
+        interrupt(
+            {
+                "run_id": state["run_id"],
+                "awaiting": "human review",
+                "proposals": state.get("proposal_count", 0),
+                "conflicts": state.get("conflict_count", 0),
+            }
+        )
         return {}
 
     def commit(self, state: RunState) -> RunState:
@@ -488,10 +580,12 @@ class Nodes:
         on the proposal and refuses if they differ.
         """
         register = register_from_state(state["register"])
-        result = repo.commit_approved(self.conn, state["pile_id"], state["run_id"],
-                                      register)
+        result = repo.commit_approved(self.conn, state["pile_id"], state["run_id"], register)
         repo.record_stage_event(
-            self.conn, state["run_id"], "commit", "committed",
+            self.conn,
+            state["run_id"],
+            "commit",
+            "committed",
             detail={k: v for k, v in result.items() if k != "deliverable_id"},
         )
         return {"status": "committed", "committed": result}
@@ -507,8 +601,7 @@ class Nodes:
         return "extract" if path.name in state.get("doc_types", {}) else "select_document"
 
     def after_reconcile(self, state: RunState) -> str:
-        return "escalate_volume" if state.get("reconcile_path") == "escalate_volume" \
-            else "compose"
+        return "escalate_volume" if state.get("reconcile_path") == "escalate_volume" else "compose"
 
     def after_propose(self, state: RunState) -> str:
         """A run with nothing to propose does not open a gate."""
@@ -537,12 +630,10 @@ class Nodes:
         the domain, not of the code.
         """
         entity_cfg = self.cfg.reconciliation.get("entity") or {}
-        threshold = float(entity_cfg.get("near_match_similarity",
-                                         DEFAULT_NEAR_MATCH_SIMILARITY))
+        threshold = float(entity_cfg.get("near_match_similarity", DEFAULT_NEAR_MATCH_SIMILARITY))
 
         def look(candidate: str) -> dict[str, Any] | None:
-            return retrieval.nearest_entity(self.conn, pile_id, candidate,
-                                            min_similarity=threshold)
+            return retrieval.nearest_entity(self.conn, pile_id, candidate, min_similarity=threshold)
 
         return look
 
@@ -561,30 +652,41 @@ class Nodes:
         pile_acme contains no quarantined and no unsupported document, so this
         section was never asked the question.
         """
-        rows = [(row["document"], Gap(row["field_name"], row["reason"], row["detail"]))
-                for row in state.get("gaps", [])]
+        rows = [
+            (row["document"], Gap(row["field_name"], row["reason"], row["detail"]))
+            for row in state.get("gaps", [])
+        ]
 
         for document in repo.documents_for_pile(self.conn, state["pile_id"]):
             reason = _NEVER_INPUT.get(document["status"])
             if not reason:
                 continue
             note = (document["ingest_note"] or "").strip()
-            rows.append((document["filename"], Gap(
-                "(whole document)", reason,
-                # The full text lives on the finding, which is where a reviewer
-                # reads the evidence. Here it is a pointer, and an unbounded
-                # note would stretch the table past reading width.
-                (note[:117] + "…") if len(note) > 118 else (note or None),
-            )))
+            rows.append(
+                (
+                    document["filename"],
+                    Gap(
+                        "(whole document)",
+                        reason,
+                        # The full text lives on the finding, which is where a reviewer
+                        # reads the evidence. Here it is a pointer, and an unbounded
+                        # note would stretch the table past reading width.
+                        (note[:117] + "…") if len(note) > 118 else (note or None),
+                    ),
+                )
+            )
         return rows
 
     @staticmethod
     def _gap_row(document: str, gap: Gap) -> dict[str, Any]:
-        return {"document": document, "field_name": gap.field_name,
-                "reason": gap.reason, "detail": gap.detail}
+        return {
+            "document": document,
+            "field_name": gap.field_name,
+            "reason": gap.reason,
+            "detail": gap.detail,
+        }
 
-    def _facts_and_conflicts(self, state: RunState) -> tuple[list[SourcedFact],
-                                                             ReconcileResult]:
+    def _facts_and_conflicts(self, state: RunState) -> tuple[list[SourcedFact], ReconcileResult]:
         """The pile as it stands, reconciled.
 
         Reloaded and recomputed rather than carried between nodes. Both are pure
@@ -617,8 +719,7 @@ class Nodes:
         and deserves a fresh look.
         """
         values = conflict.distinct_values
-        return any(row["status"] == "pending" or row["values"] == values
-                   for row in history)
+        return any(row["status"] == "pending" or row["values"] == values for row in history)
 
     @staticmethod
     def _conflict_summary(conflict: Conflict) -> str:
@@ -626,8 +727,11 @@ class Nodes:
         return (
             f"{conflict.field}: {len(conflict.distinct_values)} distinct values across "
             f"{len(conflict.members)} documents"
-            + (f" — propose {proposed.display} from {proposed.document}" if proposed
-               else " — no proposal; the documents do not settle this")
+            + (
+                f" — propose {proposed.display} from {proposed.document}"
+                if proposed
+                else " — no proposal; the documents do not settle this"
+            )
         )
 
     @staticmethod
@@ -641,9 +745,14 @@ class Nodes:
             "proposed_from": proposed.document if proposed else None,
             "rationale": conflict.rationale,
             "members": [
-                {"document": m.document, "doc_type": m.doc_type, "value": m.canonical,
-                 "quote": m.fact.span.text, "char_start": m.fact.span.char_start,
-                 "char_end": m.fact.span.char_end}
+                {
+                    "document": m.document,
+                    "doc_type": m.doc_type,
+                    "value": m.canonical,
+                    "quote": m.fact.span.text,
+                    "char_start": m.fact.span.char_start,
+                    "char_end": m.fact.span.char_end,
+                }
                 for m in conflict.members
             ],
         }
@@ -654,10 +763,9 @@ class Nodes:
 # in the words a reviewer needs rather than as a status code.
 _NEVER_INPUT = {
     "quarantined": "quarantined for containing instructions aimed at the "
-                   "system; never used as input",
+    "system; never used as input",
     "unsupported": "the format is not supported, so the document was never read",
-    "escalated": "classification or identity was escalated to a person; not "
-                 "extracted",
+    "escalated": "classification or identity was escalated to a person; not " "extracted",
 }
 
 
@@ -672,9 +780,14 @@ def _finding_row(finding: Finding) -> dict[str, Any]:
         "statement": " ".join(finding.statement.split()),
         "detail": finding.detail,
         "citations": [
-            {"document": c.document, "doc_type": c.doc_type, "value": c.display,
-             "quote": c.fact.span.text, "char_start": c.fact.span.char_start,
-             "char_end": c.fact.span.char_end}
+            {
+                "document": c.document,
+                "doc_type": c.doc_type,
+                "value": c.display,
+                "quote": c.fact.span.text,
+                "char_start": c.fact.span.char_start,
+                "char_end": c.fact.span.char_end,
+            }
             for c in finding.citations
         ],
     }

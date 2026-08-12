@@ -11,6 +11,7 @@ Two consumers, one index.
 The embedder is deliberately swappable and deliberately local. See `embed.py`
 for what that costs and what it buys.
 """
+
 from app.retrieval.embed import DIMENSIONS, Embedder, HashedNgramEmbedder, get_embedder
 from app.retrieval.search import (
     nearest_entity,
@@ -20,6 +21,12 @@ from app.retrieval.search import (
 )
 
 __all__ = [
-    "DIMENSIONS", "Embedder", "HashedNgramEmbedder", "get_embedder",
-    "nearest_entity", "remember_entity", "search_spans", "vector_literal",
+    "DIMENSIONS",
+    "Embedder",
+    "HashedNgramEmbedder",
+    "get_embedder",
+    "nearest_entity",
+    "remember_entity",
+    "search_spans",
+    "vector_literal",
 ]
