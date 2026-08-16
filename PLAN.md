@@ -36,17 +36,19 @@ produces an honest report of nothing found.
 
 **It stays alive.** A new document arrives and produces a *targeted update* to
 the register, not a rewrite and not a re-run that happens to reproduce the same
-bytes.
+bytes. Sections the new document did not affect stay byte-identical, and the
+system proves it. Where the new document contradicts what the register already
+says, the conflict is surfaced, never silently resolved.
 
-> **Built differently from this plan.** This said "new documents land in a
-> watched folder", and no watcher was built. Arrival is an operation — `POST
-> /arrivals`, `doctask_document_arrived`, or the UI — and something outside the
-> system calls it. `WATCH_DIR` is still set in `docker-compose.yml` and nothing
-> consumes it. The movement this paragraph describes is real and tested; only
-> its trigger differs, and a plan claiming a component that does not exist is
-> worse than a plan that admits the substitution. Sections the new document did not affect stay
-byte-identical, and the system proves it. Where the new document contradicts what
-the register already says, the conflict is surfaced, never silently resolved.
+> **Built late, after this note said it would not be.** This carried a
+> retraction for a while: the plan said "new documents land in a watched
+> folder", no watcher had been built, and `WATCH_DIR` sat in
+> `docker-compose.yml` with nothing consuming it. `app/watch.py` was written
+> afterwards. A file landing in `WATCH_DIR` is now an arrival like any other —
+> the same operation `POST /arrivals`, `doctask_document_arrived` and the UI
+> call, halted at the same gate. The trigger no longer differs from the plan.
+> The retraction is described rather than deleted, because a plan that quietly
+> reabsorbs what it once admitted it had not built is not a record of anything.
 
 A human approves every conflict, every finding and every update before it commits.
 

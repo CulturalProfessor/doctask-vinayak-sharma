@@ -1011,20 +1011,32 @@ surfaces, two corpora, and the documentation to read it by.
    material is in this file under "Worth putting in the write-up", and the
    README's *The calls I made* is most of the argument already.
 
-### The two open gaps, now decided
+### The two open gaps, now closed by building them
 
-Both were "either do it or stop claiming it", and both were resolved by
-stopping the claim in writing rather than by leaving the discrepancy.
+Both were "either do it or stop claiming it". Both were first answered by
+stopping the claim in writing, which is what this section used to record — and
+then, two days later, by doing the thing instead, which is the better half of
+that choice. The retractions are described here rather than deleted, because
+the order this happened in is part of the record.
 
-- **No folder watcher.** PLAN.md said documents "land in a watched folder"; none
-  was built. Arrival is an operation and something outside the system calls it.
-  PLAN now carries a *Built differently from this plan* note, and the README
-  says it under "What it does not do". `WATCH_DIR` stays in compose, unconsumed
-  and declared.
-- **pgvector is cut.** Cut-list item 2, taken. Exact and fuzzy span matching do
-  the retrieval job at this corpus size and semantic search would have added
-  latency for no measured gain. The column stays so the option reads as
-  considered rather than quietly dropped; both PLAN and README say so.
+- **The folder watcher exists.** `app/watch.py` polls `WATCH_DIR`, and a file
+  landing there becomes an arrival like any other: the same operation `POST
+  /arrivals` and `doctask_document_arrived` call, halted at the same gate, with
+  no privileged path of its own. It waits for a file to stop growing before
+  touching it, and stops retrying one it cannot read rather than retrying it
+  forever; there are tests for both. The earlier note here said none was built
+  and that `WATCH_DIR` was declared but unconsumed. That is no longer true, in
+  PLAN.md or in this file. (`5c9f973`)
+- **pgvector is not cut.** Cut-list item 2 was taken and then given back,
+  because the retrieval it buys turned out not to be a chat box over the corpus
+  but two specific jobs: entity resolution escalating a near-matching
+  counterparty name to a person instead of silently splitting the pile, and
+  `GET /piles/{id}/search` returning passages with the same provenance a
+  register cell carries. The first closed a real hole — an abbreviated name that
+  made the register look clean because it was only ever comparing a document
+  with itself. The README's *Vector search, and what it is for* is the current
+  account, including the part that stays honest about the embedder being hashed
+  character n-grams rather than a neural model. (`d11de80`)
 
 ### Worth putting in the write-up
 
