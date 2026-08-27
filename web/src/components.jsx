@@ -262,7 +262,7 @@ function escalationBody(payload) {
   };
 }
 
-export function Detail({ proposal, verdict, onVerdict, index, total }) {
+export function Detail({ proposal, verdict, onVerdict, index, total, closed }) {
   const payload = proposal.payload ?? {};
   const pending = proposal.status === "pending";
 
@@ -337,14 +337,28 @@ export function Detail({ proposal, verdict, onVerdict, index, total }) {
           <h2 className={spec.mono ? "mono" : ""}>{spec.title}</h2>
           {primary}
           {pending ? (
-            <Choice
-              verdict={verdict}
-              onVerdict={onVerdict}
-              yes={spec.yes}
-              yesSub={spec.yesSub}
-              no={spec.no}
-              noSub={spec.noSub}
-            />
+            /* An ended reading leaves its items pending, because nobody
+               decided them -- but nobody ever can, and the server refuses.
+               Offering the buttons anyway teaches a reviewer that this screen
+               will let them do things it cannot do. */
+            closed ? (
+              <div className="decide-block">
+                <Subhead>Your decision</Subhead>
+                <p className="closed-note">
+                  This reading was ended, so nothing in it can be decided. What it found is still on
+                  the pile.
+                </p>
+              </div>
+            ) : (
+              <Choice
+                verdict={verdict}
+                onVerdict={onVerdict}
+                yes={spec.yes}
+                yesSub={spec.yesSub}
+                no={spec.no}
+                noSub={spec.noSub}
+              />
+            )
           ) : (
             <Decided proposal={proposal} />
           )}
@@ -793,11 +807,11 @@ export function Stages({ report }) {
             <thead>
               <tr>
                 <th>Step</th>
-                <th>Times</th>
-                <th>ms</th>
-                <th>Sent</th>
-                <th>Received</th>
-                <th>Cost</th>
+                <th className="num">Times</th>
+                <th className="num">ms</th>
+                <th className="num">Sent</th>
+                <th className="num">Received</th>
+                <th className="num">Cost</th>
                 <th>Which way it went</th>
               </tr>
             </thead>

@@ -1083,6 +1083,11 @@ main {
 .decide-block {
   margin-top: 22px;
 }
+.closed-note {
+  font-size: 12.5px;
+  color: var(--ink-3);
+  max-width: 46ch;
+}
 .choices {
   display: flex;
   gap: 10px;
@@ -1593,6 +1598,11 @@ td.num {
   font-family: var(--mono);
   text-align: right;
   font-variant-numeric: tabular-nums;
+}
+/* A right-aligned column under a left-aligned heading reads as two columns that
+   have come apart. The heading follows the numbers, not the table default. */
+th.num {
+  text-align: right;
 }
 td.stage,
 td.mono {

@@ -258,6 +258,10 @@ export default function App() {
       });
       setVerdicts({});
       setNotice(null);
+      // The previous reading's refusal is not this reading's problem. Without
+      // this, a 409 from an ended run stays on screen while you read the run
+      // that replaced it.
+      setError(null);
       setTab("review");
       await loadRun(row.id);
     },
@@ -490,9 +494,13 @@ export default function App() {
     (p) => verdicts[p.id] === undefined || verdicts[p.id] === null,
   ).length;
   const chosen = pending.length - undecided;
-  const canDecide = chosen > 0 && decidedBy.trim().length > 0;
+  // An ended reading can be read but not acted on, and the server says so with
+  // a 409. The screen has to know it too, or every click on a dead reading is a
+  // refusal the reviewer had to earn.
+  const closed = run?.status === "abandoned";
+  const canDecide = chosen > 0 && decidedBy.trim().length > 0 && !closed;
   const canCommit =
-    run && pending.length === 0 && run.status !== "committed" && proposals.length > 0;
+    run && !closed && pending.length === 0 && run.status !== "committed" && proposals.length > 0;
 
   // Documents held back because their counterparty may already be on file.
   // Not proposals (see `NearMatch`), so they are counted and shown separately
@@ -908,6 +916,7 @@ export default function App() {
                                 [current.id]: value,
                               }))
                             }
+                            closed={closed}
                           />
                         ) : (
                           <Empty big="Choose an item on the left." />
